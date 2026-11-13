@@ -55,5 +55,5 @@ func (a *application) runExchange(args []string) error {
 	if callErr != nil {
 		return remoteFailure(callErr)
 	}
-	return a.result("auth exchange", "Device login ticket exchange response saved privately.", map[string]any{"state_file": *path, "response_saved": true, "next_action": nextAction{Kind: "run_command", Argv: []string{"svpn-cli", "--json", "serve", "--state", *path}}})
+	return a.result("auth exchange", "Device login ticket exchange response saved privately.", map[string]any{"state_file": *path, "response_saved": true, "next_action": nextAction{Kind: "run_command", Argv: []string{"svpn-cli", "--json", "auth", "inspect", "--state", *path}}})
 }

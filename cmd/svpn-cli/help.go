@@ -23,6 +23,7 @@ var commandSpecs = []commandSpec{
 	{"auth sso", "Create a browser SSO/MFA login URL, or list domain choices in an error.", "auth sso [--state FILE] [--domain ID]", []string{"network", "replace_pending_sso", "human_browser_login"}, nil},
 	{"auth finish", "Import a single-use HTTPS SSO callback without printing credentials.", "auth finish [--state FILE] [--callback-file FILE | --callback-stdin]", []string{"network", "consume_sso_callback", "write_private_state"}, []string{"svpn-cli --json auth finish --state private/auth.json --callback-file private/callback.txt"}},
 	{"auth exchange", "Exchange the saved device login ticket.", "auth exchange [--state FILE]", []string{"network", "write_private_state"}, nil},
+	{"auth inspect", "Read a redacted local login summary and next action; no network request.", "auth inspect [--state FILE]", []string{"read_private_state"}, []string{"svpn-cli --json auth inspect --state private/auth.json"}},
 	{"auth status", "Request the server's ticket-status response and save it privately.", "auth status [--state FILE]", []string{"network", "write_private_state"}, nil},
 	{"policy", "Save an authorized resource/device policy response privately.", "policy [--state FILE] [--output FILE] [--host]", []string{"network", "write_private_policy"}, nil},
 	{"ticket", "Diagnostic: request a resource ticket using an issued policy area.", "ticket --target HOST:PORT --area ID [--set-id ID] [--state FILE] [--output FILE]", []string{"network", "issue_ticket", "write_private_ticket"}, nil},
@@ -94,7 +95,7 @@ func (a *application) showHelp(f *flag.FlagSet) error {
 		for _, spec := range commands {
 			fmt.Fprintf(a.out, "  %-15s %s\n", spec.Name, spec.Summary)
 		}
-		fmt.Fprintln(a.out, "\nUse 'svpn-cli help COMMAND [SUBCOMMAND]' for flags and examples.\nPut options before positional HOST PORT. Use -- before literal positional values.\n--json produces versioned results and safe errors; connect stdout always stays raw TCP.\nserve --json emits NDJSON ready/stopped events; keep it running under a supervisor.\nLogin: auth init -> auth sso -> human browser login/MFA -> auth finish -> auth exchange.\nCredentials remain in private files.\nserve: vpn-only for upstream routing; auto uses policy and sends unmatched traffic directly.\nProtected destinations fail closed. See docs/automation.md for the agent contract.")
+		fmt.Fprintln(a.out, "\nUse 'svpn-cli help COMMAND [SUBCOMMAND]' for flags and examples.\nPut options before positional HOST PORT. Use -- before literal positional values.\n--json produces versioned results and safe errors; connect stdout always stays raw TCP.\nserve --json emits NDJSON ready/stopped events; keep it running under a supervisor.\nLogin: auth init -> auth sso -> human browser login/MFA -> auth finish -> auth exchange.\nInspect progress with auth inspect; credentials remain in private files.\nserve: vpn-only for upstream routing; auto uses policy and sends unmatched traffic directly.\nProtected destinations fail closed. See docs/automation.md for the agent contract.")
 		return nil
 	}
 	var spec commandSpec

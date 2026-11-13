@@ -112,6 +112,9 @@ func (a *application) runAuth(args []string) error {
 	if len(args) > 0 && args[0] == "status" {
 		return a.runAuthStatus(args[1:])
 	}
+	if args[0] == "inspect" {
+		return a.runAuthInspect(args[1:])
+	}
 	if args[0] != "init" {
 		return usageError("unknown auth subcommand; use svpn-cli auth --help")
 	}

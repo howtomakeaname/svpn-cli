@@ -46,7 +46,8 @@ func usageError(message string) error {
 }
 
 func authRequired(message string) error {
-	return &cliError{Code: "AUTH_REQUIRED", Message: message, exit: 3}
+	return &cliError{Code: "AUTH_REQUIRED", Message: message, exit: 3,
+		NextAction: &nextAction{Kind: "inspect_auth", Message: "Run auth inspect with the same --state file."}}
 }
 
 func remoteFailure(err error) error {

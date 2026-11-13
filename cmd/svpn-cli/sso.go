@@ -229,6 +229,9 @@ func (a *application) runSSOFinish(args []string) error {
 	pending := *s.PendingSSO
 	// One callback attempt per random state; do not silently reuse CAS tickets.
 	s.PendingSSO = nil
+	// A new callback belongs to a new login attempt. Old credentials must not
+	// appear ready if this attempt fails or requires another challenge.
+	s.Login, s.Exchange, s.Status = nil, nil, nil
 	if err := writeAuth(*path, &s); err != nil {
 		return err
 	}
