@@ -27,6 +27,23 @@ svpn-cli --version
 svpn-cli --help
 ```
 
+## Agent 与自动化
+
+提供结构化命令发现、版本化 JSON 结果、分类错误和本地登录进度检查，可直接通过 agent 的进程调用工具使用：
+
+```bash
+svpn-cli --json help
+svpn-cli --json help auth finish
+svpn-cli --json auth inspect --state private/auth.json
+svpn-cli --json serve --state private/auth.json --mode auto --http 127.0.0.1:0 --socks ''
+```
+
+有限命令将结果写到 stdout，错误写到 stderr；两者都有 `schema_version`、`command` 和 `ok`。`--json` 自动禁用交互提示，也可单独用 `--non-interactive`。浏览器 SSO/MFA 仍由用户完成，回调通过 `--callback-file` 或 `--callback-stdin` 导入。
+
+`auth inspect` 只读本地文件，返回经过筛选的阶段和 `next_action`，不代表服务端凭据仍有效。`serve --json` 输出 NDJSON `ready` / `stopped` 事件，动态端口见 `ready.data.listeners`；应由 agent 或进程管理器保持运行。`connect` 的 stdout 始终是原始 TCP 数据，JSON 错误只走 stderr，兼容 SSH `ProxyCommand`。
+
+完整输出约定、退出码、重试边界及调用示例见 [自动化接口](docs/automation.md)。选项须放在 `HOST PORT` 等位置参数之前。
+
 ## 登录
 
 只对自己有权限使用的组织和资源操作。请查阅所属组织的接入说明，向服务部署方获取组织 PIN、认证域及网关信任信息。
@@ -117,7 +134,7 @@ svpn-cli serve --state private/auth.json --user-agent 'YOUR_USER_AGENT'
 go test -race ./...
 go vet ./...
 go build -trimpath -o bin/svpn-cli ./cmd/svpn-cli
-python3 scripts/build_release.py --version v0.1.0
+python3 scripts/build_release.py --version v0.2.0
 ```
 
 原生测试在 Linux/macOS/Windows 执行，打包任务构建三系统的 amd64/arm64 共六份产物。推送 `v*` 标签会启动 Release 工作流：测试及构建通过后，校验压缩包，再发布实验版本和 SHA-256 校验文件。保持提交简小，回滚用 `git revert`。

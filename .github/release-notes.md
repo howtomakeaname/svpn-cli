@@ -1,4 +1,13 @@
-Initial experimental release of svpn-cli.
+Experimental svpn-cli release with an automation interface for agents.
+
+- Versioned `--json` results, redacted errors and categorized exit codes.
+- Text and JSON command discovery, including flags, examples and execution effects.
+- Read-only `auth inspect` with local login stages and next actions.
+- Explicit non-interactive callback import via private file or stdin; browser login/MFA remains user-driven.
+- NDJSON proxy readiness/shutdown events with actual dynamically assigned listener ports.
+- Raw `connect` stdout remains compatible with SSH ProxyCommand, including in JSON mode.
+
+Core access features:
 
 - Browser SSO/MFA handoff, private device state and per-resource access tickets.
 - Loopback HTTP CONNECT, ordinary HTTP and SOCKS5 TCP proxies.
