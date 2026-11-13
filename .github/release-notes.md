@@ -6,6 +6,9 @@ Experimental svpn-cli release with an automation interface for agents.
 - Explicit non-interactive callback import via private file or stdin; browser login/MFA remains user-driven.
 - NDJSON proxy readiness/shutdown events with actual dynamically assigned listener ports.
 - Raw `connect` stdout remains compatible with SSH ProxyCommand, including in JSON mode.
+- `forward` maps a local loopback TCP port to an authorized remote service.
+- `reverse` maps a remote SSH loopback port to a local service over VPN + native Go SSH, with strict known_hosts verification and private credential files.
+- Both forwarding commands emit readiness/shutdown events, bound concurrent streams, and close active connections on shutdown; automatic reconnection is not implemented.
 
 Core access features:
 

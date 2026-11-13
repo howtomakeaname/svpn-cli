@@ -9,6 +9,8 @@ svpn-cli --json version
 svpn-cli --json help
 svpn-cli --json help auth finish
 svpn-cli --json help serve
+svpn-cli --json help forward
+svpn-cli --json help reverse
 ```
 
 根帮助列出命令、用途、使用方式、执行影响（例如设备注册、写私密文件、启动监听）和退出码。命令帮助包含从真实参数解析器生成的 flags、类型和默认值。`help auth` / `auth --help` 列出认证子命令。发现命令不进行网络请求或修改状态。
@@ -56,6 +58,8 @@ svpn-cli --json help serve
 
 `DOMAIN_SELECTION_REQUIRED` 的 `error.details.domains` 提供 `{id, name}` 数组，用选定的 ID 重跑 `auth sso --domain ID`。网关拒绝的 `error.details.http_status` 仅含 HTTP 状态，不输出响应头或正文。未知底层错误不会原样复制进 JSON，避免泄漏 URL 中的票据等信息。
 
+SSH 转发额外使用以下错误码：`SSH_KEY_PASSPHRASE_REQUIRED`（退出码 3），`INVALID_SSH_INPUT` / `INVALID_KNOWN_HOSTS`（4），`SSH_CONNECTION_FAILED` / `SSH_HOST_KEY_REJECTED` / `REMOTE_LISTENER_FAILED`（5）。不会自动接受新的主机密钥或提示输入 SSH 密码；调用方应准备私密凭据文件和经过核实的主机密钥。
+
 当前错误均使用 `retryable: false`，表示不承诺重放安全。注册设备、交换票据、消耗回调及申请资源票据都有服务端影响；连接中断时可能已经生效。不得根据 HTTP 状态或某条文字自动反复注册/登录。
 
 ## 登录状态与用户参与
@@ -95,6 +99,36 @@ stdout 是 NDJSON 事件流，代理保持前台运行。端口 0 由系统分�
 调用方应持续读取 stdout、监控 stderr 和退出码，并在任务结束时停止进程。正常处理的关闭会发出 `stopped`；异常退出、强制终止或断电可能没有此事件。不要用等待进程退出的普通工具调用启动长期代理，也不要把读取第一行后的 EOF 当作就绪。`vpn-only` / `auto` 的选择与路由边界见 README。
 
 `connect` 是唯一的数据流例外：stdout 始终是原始 TCP，包括指定 `--json` 时；失败信息仅在 stderr 输出 JSON。继续用于 SSH `ProxyCommand`，不要把它的 stdout 交给 JSON 解析器。
+
+## 管理固定端口转发
+
+```bash
+# 本机监听 → VPN 策略选择的远程服务
+svpn-cli --json forward --state private/auth.json --listen 127.0.0.1:0 --target notebook.internal.example:8888
+
+# 远程 SSH 主机监听 → VPN + SSH → 本机服务
+svpn-cli --json reverse --state private/auth.json \
+  --ssh-host ssh.internal.example:22 --ssh-user USER \
+  --known-hosts /path/to/verified_known_hosts --identity-file /path/to/id_ed25519 \
+  --listen 127.0.0.1:0 --target 127.0.0.1:3000
+```
+
+两个命令均为长期进程。与 `serve` 一样监听 NDJSON `ready` / `stopped`，从 `ready.data.listen` 取实际监听地址；它们不输出 `serve` 的 `listeners` 映射。示例：
+
+```json
+{"schema_version":1,"command":"forward","ok":true,"event":"ready","data":{"direction":"local_to_remote","listen":"127.0.0.1:49152","target":"notebook.internal.example:8888","mode":"vpn-only","target_connectivity_tested":false}}
+{"schema_version":1,"command":"reverse","ok":true,"event":"ready","data":{"direction":"remote_to_local","ssh_host":"ssh.internal.example:22","listen":"127.0.0.1:49153","target":"127.0.0.1:3000","mode":"vpn-only","target_connectivity_tested":false}}
+```
+
+`forward` 的 ready 只保证本机端口已绑定，以及使用 `--state` 时初始策略已获取；按需为每条流申请资源票据。`reverse` 的 ready 还保证 VPN/SSH 连接和服务端监听请求已成功，但不预先连接本机目标。两者都不在 stdout 中输出转发的应用数据。
+
+默认 `vpn-only`；显式 `--mode auto` 会按组织策略允许未命中资源直连，适用于 `forward` 的远程目标或 `reverse` 的 SSH 连接。反向转发的最终目标由本机直接拨号，须为回环 IP，不再次进入 VPN 代理。两个命令监听地址均须为回环 IP，端口 0 可动态分配；远程 SSH 服务端配置仍决定实际绑定行为。
+
+`reverse` 的 SSH 主机须允许远程 TCP 监听，使用 `--identity-file` 或 `--password-file` 二选一。加密私钥可附加 `--key-passphrase-file`。这些凭据文件使用与其他私密文件相同的权限检查；密码/口令文件包含单行内容（可有行尾换行），上限 4 KiB。VPN 与 SSH 认证互相独立，不会用 NetID 凭据自动尝试 SSH。
+
+单个流连接被策略拒绝或目标不可用时，该流直接关闭，监听进程继续运行；没有自动回退、重试或逐流 JSON 错误事件。`--max-connections` 限制并发（默认 128）。停止进程会关闭活动流及监听；反向转发关闭专用 SSH 连接以释放远程端口。SSH 连接每 30 秒发送保活请求，等待响应最多 10 秒。VPN 票据到期仍会终止它，当前无自动重连；调用方应监控进程退出，处理用户认证或配置问题后重新启动。
+
+实现使用 Go SSH 的 [已有连接握手](https://pkg.go.dev/golang.org/x/crypto/ssh#NewClientConn)、[远程监听](https://pkg.go.dev/golang.org/x/crypto/ssh#Client.Listen) 和 [OpenSSH known_hosts 校验](https://pkg.go.dev/golang.org/x/crypto/ssh/knownhosts#New)。
 
 ## 有限命令调用示例（Python）
 
