@@ -6,9 +6,9 @@
 
 一个面向 iOA / SVPN 的轻量跨平台 CLI 适配客户端：通过浏览器完成 SSO/MFA，按资源获取访问票据，提供 HTTP/SOCKS5 代理、SOCKS5 UDP、Linux TUN 和双向 TCP 端口转发，支持按组织策略分流及 mihomo / Clash 集成。
 
-![svpn-cli 的控制面与两种代理模式](docs/assets/architecture.png)
+![svpn-cli 的授权依赖、HTTP/SOCKS5/TUN 入口与策略分流路径](docs/assets/architecture.png)
 
-图示为核心代理路径；UDP、TUN 与 TLCP 的范围和验证状态见 [传输能力](docs/transports.md)。
+虚线表示授权依赖，实线表示请求转发方向，响应沿连接返回。`auto` 仅对未命中资源直连；Linux TUN 只支持 `vpn-only`。UDP 封装与可选 TLCP 的验证边界见 [传输能力](docs/transports.md)。
 
 **当前为实验版本。** Linux 已完成真实登录及 SSH 联调；Windows/macOS 提供原生 CI 测试和发布包，真实部署兼容性仍需使用者验证。项目为第三方互操作工具，与相关厂商或组织无隶属关系。
 
