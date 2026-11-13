@@ -4,11 +4,11 @@
 [![Release](https://img.shields.io/github/v/release/howtomakeaname/svpn-cli?include_prereleases)](https://github.com/howtomakeaname/svpn-cli/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个轻量的 TCP 远程接入客户端：通过浏览器完成 SSO/MFA，按资源获取访问票据，为 SSH、HTTP 和 HTTPS 应用提供本地 HTTP/SOCKS5 代理。
+一个面向腾讯 iOA / SVPN 的轻量跨平台 CLI 适配客户端：通过浏览器完成 SSO/MFA，按资源获取访问票据，为 SSH、HTTP 和 HTTPS 应用提供本地 HTTP/SOCKS5 TCP 代理，支持按组织策略分流及 mihomo / Clash 集成。
 
 ![svpn-cli 的控制面与两种代理模式](docs/assets/architecture.png)
 
-**当前为实验版本。** Linux 已完成真实登录及 SSH 联调；Windows/macOS 提供原生 CI 测试和发布包，真实部署兼容性仍需使用者验证。项目为第三方互操作工具，与相关厂商或学校无隶属关系。
+**当前为实验版本。** Linux 已完成真实登录及 SSH 联调；Windows/macOS 提供原生 CI 测试和发布包，真实部署兼容性仍需使用者验证。项目为第三方互操作工具，与相关厂商或组织无隶属关系。
 
 ## 安装
 
@@ -29,7 +29,7 @@ svpn-cli --help
 
 ## 登录
 
-只对自己有权限使用的组织和资源操作。组织 PIN、认证域及网关信任信息应由服务部署方提供；学校用户可参考其 [VPN 使用说明](https://inc.sysu.edu.cn/service/vpn)。
+只对自己有权限使用的组织和资源操作。请查阅所属组织的接入说明，向服务部署方获取组织 PIN、认证域及网关信任信息。
 
 ```bash
 svpn-cli auth init --state private/auth.json --pin YOUR_ORGANIZATION_PIN --machine My-Device
