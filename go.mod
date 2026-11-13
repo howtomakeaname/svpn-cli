@@ -16,3 +16,5 @@ require (
 	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc // indirect
 	golang.org/x/time v0.15.0 // indirect
 )
+
+replace gitee.com/Trisia/gotlcp => github.com/howtomakeaname/gotlcp v1.6.3-0.20261113152007-97f5c590be74

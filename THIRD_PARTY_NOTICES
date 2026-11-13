@@ -298,7 +298,10 @@ Some files carry the "BSD" license, noted at the top of each file:
    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
    POSSIBILITY OF SUCH DAMAGE.
 
-gitee.com/Trisia/gotlcp v1.6.2
+gitee.com/Trisia/gotlcp v1.6.2, with the optional SM2 signature-code patch
+from github.com/howtomakeaname/gotlcp
+v1.6.3-0.20261113152007-97f5c590be74.
+Patch: https://github.com/howtomakeaname/gotlcp/commit/97f5c590be74
 
 MIT License
 
