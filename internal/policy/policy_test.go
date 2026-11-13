@@ -21,7 +21,7 @@ func TestIssuedRulesAndBoundaries(t *testing.T) {
 		{"172.20.2.3", 23, "", true}, {"2001:db8:ffff::1", 22, "ip", false}, {"2001:db9::1", 22, "", false},
 		{"A.CAMPUS.EXAMPLE.", 443, "domain", false}, {"a.b.campus.example", 8002, "domain", false},
 		{"a.campus.example", 80, "", true}, {"campus.example", 443, "", false}, {"campus.example.evil", 443, "", false},
-		{"192.0.2.53", 53, "", false},
+		{"192.0.2.53", 53, "", true},
 	} {
 		a, blocked := p.Match(tt.host, tt.port)
 		id := ""

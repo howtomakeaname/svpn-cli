@@ -67,6 +67,41 @@ func TestRoutingNeverFallsBackAfterVPNOrPolicyDenial(t *testing.T) {
 	}
 }
 
+func TestUDPRoutingDoesNotReuseTCPOrFallBackForProtectedHosts(t *testing.T) {
+	p := testPolicy(t)
+	for _, mode := range []string{"auto", "vpn-only"} {
+		t.Run(mode, func(t *testing.T) {
+			tcp, udp, direct := 0, 0, 0
+			r, _ := New(mode, func(context.Context) (*policy.Policy, error) { return p, nil }, func(context.Context, *policy.Area, string) (net.Conn, error) { tcp++; return nil, nil })
+			r.UDP = func(context.Context, *policy.Area, string) (net.Conn, error) {
+				udp++
+				return nil, errors.New("UDP denied")
+			}
+			r.Direct = func(context.Context, string, string) (net.Conn, error) { direct++; return nil, nil }
+			r.Lookup = func(context.Context, string, string) ([]netip.Addr, error) {
+				return []netip.Addr{netip.MustParseAddr("172.16.1.2")}, nil
+			}
+			for _, target := range []string{"172.16.1.2:22", "a.campus.example:443", "unlisted.example:22"} {
+				if _, err := r.DialContext(context.Background(), "udp", target); err == nil {
+					t.Fatal("TCP-only resource accepted UDP")
+				}
+			}
+			if tcp != 0 || udp != 0 || direct != 0 {
+				t.Fatal("protocol denial contacted a transport")
+			}
+			// The same address may be explicitly enabled for both protocols.
+			p.Areas[0].Protocol = "3"
+			if _, err := r.DialContext(context.Background(), "udp", "172.16.1.2:22"); err == nil {
+				t.Fatal("UDP denial ignored")
+			}
+			if tcp != 0 || udp != 1 || direct != 0 {
+				t.Fatal("UDP failure reused TCP or direct transport")
+			}
+			p.Areas[0].Protocol = "2"
+		})
+	}
+}
+
 func TestPolicyRefreshCoalescesAndDomainPreservesRemoteDNS(t *testing.T) {
 	p := testPolicy(t)
 	var calls atomic.Int32

@@ -203,15 +203,22 @@ func (a *Area) compile() error {
 // Match returns a rule and whether the host is protected but the port is not
 // permitted. Callers must never direct-connect after a protected match fails.
 func (p *Policy) Match(host string, port int) (*Area, bool) {
+	return p.MatchNetwork("tcp", host, port)
+}
+
+// MatchNetwork treats an address as protected even when only another protocol
+// is permitted. A protocol mismatch must never turn a protected target into a
+// direct route in auto mode.
+func (p *Policy) MatchNetwork(network, host string, port int) (*Area, bool) {
+	if network != "tcp" && network != "udp" {
+		return nil, true
+	}
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	ip, ipErr := netip.ParseAddr(host)
 	ip = ip.Unmap()
 	protected := false
 	for i := range p.Areas {
 		a := &p.Areas[i]
-		if a.Protocol == "1" {
-			continue
-		} // 1=UDP, 2=TCP, 3/empty=both.
 		matched := false
 		if ipErr == nil {
 			for _, r := range a.addresses {
@@ -237,6 +244,10 @@ func (p *Policy) Match(host string, port int) (*Area, bool) {
 			continue
 		}
 		protected = true
+		// 1=UDP, 2=TCP, 3/empty=both.
+		if (network == "tcp" && a.Protocol == "1") || (network == "udp" && a.Protocol == "2") {
+			continue
+		}
 		if a.allPorts {
 			return a, false
 		}

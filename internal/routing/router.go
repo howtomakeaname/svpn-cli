@@ -17,6 +17,7 @@ type Router struct {
 	Mode       string
 	Fetch      func(context.Context) (*policy.Policy, error)
 	VPN        func(context.Context, *policy.Area, string) (net.Conn, error)
+	UDP        func(context.Context, *policy.Area, string) (net.Conn, error)
 	Direct     func(context.Context, string, string) (net.Conn, error)
 	Lookup     func(context.Context, string, string) ([]netip.Addr, error)
 	mu         sync.Mutex
@@ -87,8 +88,21 @@ func (r *Router) Policy(ctx context.Context) (*policy.Policy, error) {
 }
 
 func (r *Router) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if network != "tcp" && network != "tcp4" && network != "tcp6" {
-		return nil, errors.New("only TCP routing is supported")
+	protocol := "tcp"
+	if network == "udp" || network == "udp4" || network == "udp6" {
+		protocol = "udp"
+	} else if network != "tcp" && network != "tcp4" && network != "tcp6" {
+		return nil, errors.New("unsupported routing protocol")
+	}
+	vpn := r.VPN
+	if protocol == "udp" {
+		vpn = r.UDP
+	}
+	vpnDial := func(ctx context.Context, a *policy.Area, target string) (net.Conn, error) {
+		if vpn == nil {
+			return nil, errors.New("requested VPN transport is unavailable")
+		}
+		return vpn(ctx, a, target)
 	}
 	address, err := native.CanonicalAddress(address)
 	if err != nil {
@@ -100,12 +114,12 @@ func (r *Router) DialContext(ctx context.Context, network, address string) (net.
 	if err != nil {
 		return nil, errors.New("resource policy unavailable; routing refused")
 	}
-	area, protected := p.Match(host, port)
+	area, protected := p.MatchNetwork(protocol, host, port)
 	if area != nil {
-		return r.VPN(ctx, area, address)
+		return vpnDial(ctx, area, address)
 	}
 	if protected {
-		return nil, errors.New("resource port is not permitted by policy")
+		return nil, errors.New("resource port or protocol is not permitted by policy")
 	}
 	if _, err := netip.ParseAddr(host); err == nil {
 		if r.Mode == "vpn-only" {
@@ -123,14 +137,14 @@ func (r *Router) DialContext(ctx context.Context, network, address string) (net.
 	}
 	blocked := false
 	for _, ip := range ips {
-		a, deny := p.Match(ip.Unmap().String(), port)
+		a, deny := p.MatchNetwork(protocol, ip.Unmap().String(), port)
 		if a != nil {
-			return r.VPN(ctx, a, net.JoinHostPort(ip.Unmap().String(), portText))
+			return vpnDial(ctx, a, net.JoinHostPort(ip.Unmap().String(), portText))
 		}
 		blocked = blocked || deny
 	}
 	if blocked {
-		return nil, errors.New("resolved resource port is not permitted by policy")
+		return nil, errors.New("resolved resource port or protocol is not permitted by policy")
 	}
 	if r.Mode == "vpn-only" {
 		return nil, errors.New("target does not match VPN resource policy")
