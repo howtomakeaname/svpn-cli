@@ -57,6 +57,14 @@ func writeAuth(path string, s *authState) error {
 }
 
 func readAuth(path string) (authState, error) {
+	s, err := readAuthFile(path)
+	if err != nil && !os.IsNotExist(err) && !os.IsPermission(err) {
+		return s, &cliError{Code: "INVALID_AUTH_STATE", Message: "Cannot read a valid private authentication state file.", exit: 4, cause: err}
+	}
+	return s, err
+}
+
+func readAuthFile(path string) (authState, error) {
 	var s authState
 	f, err := os.Open(path)
 	if err != nil {
@@ -84,6 +92,14 @@ func readAuth(path string) (authState, error) {
 }
 
 func (a *application) runAuth(args []string) error {
+	group := a.newFlagSet("auth")
+	if err := a.parseFlags(group, args); err != nil {
+		return err
+	}
+	args = group.Args()
+	if len(args) == 0 {
+		return a.showHelp(group)
+	}
 	if len(args) > 0 && args[0] == "sso" {
 		return a.runSSO(args[1:])
 	}
@@ -96,8 +112,8 @@ func (a *application) runAuth(args []string) error {
 	if len(args) > 0 && args[0] == "status" {
 		return a.runAuthStatus(args[1:])
 	}
-	if len(args) == 0 || args[0] != "init" {
-		return errors.New("usage: svpn-cli auth init --state private/auth.json --pin ORGANIZATION_PIN")
+	if args[0] != "init" {
+		return usageError("unknown auth subcommand; use svpn-cli auth --help")
 	}
 	f := a.newFlagSet("auth init")
 	headerOptions := addHeaderFlags(f)
@@ -109,21 +125,24 @@ func (a *application) runAuth(args []string) error {
 		return err
 	}
 	if f.NArg() != 0 {
-		return errors.New("unexpected positional arguments")
+		return usageError("unexpected positional arguments")
 	}
 	state, err := readAuth(*path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
+		if *pin == "" {
+			return usageError("--pin is required for first initialization")
+		}
+		if _, err := control.NewClient(*origin); err != nil {
+			return usageError("--origin must be an HTTPS origin without credentials, query or fragment")
+		}
 		guid, err := control.UUID()
 		if err != nil {
 			return err
 		}
 		state = authState{Version: 1, Origin: *origin, GUID: guid, CreatedAt: time.Now()}
-		if err := writeAuth(*path, &state); err != nil {
-			return err
-		}
 	}
 	state.HeaderProfile, err = headerOptions.apply(state.HeaderProfile)
 	if err != nil {
@@ -131,12 +150,15 @@ func (a *application) runAuth(args []string) error {
 	}
 	if *machine != "" {
 		if len(*machine) > 63 || strings.ContainsAny(*machine, "\r\n\x00") {
-			return errors.New("device display name must be 1-63 bytes without control separators")
+			return usageError("device display name must be 1-63 bytes without control separators")
 		}
 		state.Machine = *machine
 	}
 	if state.Machine == "" {
 		state.Machine = "MacBook-Pro"
+	}
+	if state.Organization.TenantID == "" && *pin == "" {
+		return usageError("--pin is required for organization discovery")
 	}
 	if err := writeAuth(*path, &state); err != nil {
 		return err
@@ -152,12 +174,9 @@ func (a *application) runAuth(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if state.Organization.TenantID == "" {
-		if *pin == "" {
-			return errors.New("--pin is required for organization discovery")
-		}
 		org, err := client.QueryOrganization(ctx, *pin)
 		if err != nil {
-			return err
+			return remoteFailure(err)
 		}
 		state.Organization = org
 		if err := writeAuth(*path, &state); err != nil {
@@ -175,7 +194,7 @@ func (a *application) runAuth(args []string) error {
 			}
 		}
 		if err != nil {
-			return err
+			return remoteFailure(err)
 		}
 		for _, key := range []string{"", "Reply", "Data"} {
 			var values map[string]json.RawMessage
@@ -213,6 +232,8 @@ func (a *application) runAuth(args []string) error {
 	q.Set("Tenant-Id", state.Organization.TenantID)
 	q.Set("theme", "ioa-saas-new")
 	u.RawQuery = q.Encode()
-	fmt.Printf("Organization: %s\nDevice name: %s\nDevice state: %s\nOfficial login page (regular browser sessions differ from device sessions):\n%s\nFor a CLI-bound CAS flow, run: svpn-cli auth sso --state %s\n", state.Organization.Company, state.Machine, *path, u.String(), *path)
-	return nil
+	return a.result("auth init", fmt.Sprintf("Organization: %s\nDevice name: %s\nDevice state: %s\nOfficial login page (regular browser sessions differ from device sessions):\n%s\nFor a CLI-bound CAS flow, run: svpn-cli auth sso --state %s", state.Organization.Company, state.Machine, *path, u.String(), *path), map[string]any{
+		"state_file": *path, "registered": true,
+		"next_action": nextAction{Kind: "run_command", Argv: []string{"svpn-cli", "--json", "auth", "sso", "--state", *path}},
+	})
 }

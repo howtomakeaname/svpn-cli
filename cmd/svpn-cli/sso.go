@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/howtomakeaname/svpn-cli/internal/control"
 	"github.com/howtomakeaname/svpn-cli/internal/privatefs"
 	"io"
@@ -25,7 +24,7 @@ type pendingSSO struct {
 
 func deviceClient(s *authState) (*control.Client, error) {
 	if s.MID == "" {
-		return nil, errors.New("run auth init to register this device first")
+		return nil, authRequired("run auth init to register this device first")
 	}
 	c, err := control.NewClient(s.Origin)
 	if err != nil {
@@ -47,7 +46,7 @@ func (a *application) runSSO(args []string) error {
 		return err
 	}
 	if f.NArg() != 0 {
-		return errors.New("unexpected positional arguments")
+		return usageError("unexpected positional arguments")
 	}
 	s, err := readAuth(*path)
 	if err != nil {
@@ -62,7 +61,7 @@ func (a *application) runSSO(args []string) error {
 	body := map[string]any{"tenantId": c.TenantID, "platform": "Linux"}
 	r, err := c.Authkeeper(ctx, "domains", body)
 	if err != nil {
-		return err
+		return remoteFailure(err)
 	}
 	var domains []struct {
 		ID      string   `json:"domain_id"`
@@ -82,15 +81,17 @@ func (a *application) runSSO(args []string) error {
 		}
 	}
 	if len(configs) == 0 {
+		choices := make([]map[string]string, 0, len(domains))
 		for _, item := range domains {
-			fmt.Printf("Domain: %s (%s)\n", item.Name, item.ID)
+			choices = append(choices, map[string]string{"id": item.ID, "name": item.Name})
 		}
-		return errors.New("select an authentication domain with --domain")
+		return &cliError{Code: "DOMAIN_SELECTION_REQUIRED", Message: "Select an authentication domain with --domain.", exit: 3,
+			Details: map[string]any{"domains": choices}, NextAction: &nextAction{Kind: "choose_domain"}}
 	}
 	body["domain"], body["config_ids"], body["stage"] = *domain, configs, "login"
 	r, err = c.Authkeeper(ctx, "auth-configs", body)
 	if err != nil {
-		return err
+		return remoteFailure(err)
 	}
 	var sources []struct {
 		ID     string `json:"id"`
@@ -106,13 +107,13 @@ func (a *application) runSSO(args []string) error {
 	for _, source := range sources {
 		if source.Type == "CAS" {
 			if sourceID != "" {
-				return errors.New("multiple CAS sources are not yet supported")
+				return &cliError{Code: "UNSUPPORTED_AUTH", Message: "Multiple CAS sources are not supported.", exit: 3}
 			}
 			sourceID, template = source.ID, source.Config.URL
 		}
 	}
 	if sourceID == "" || !strings.Contains(template, "${uri}") {
-		return errors.New("this authentication source is not supported yet (CAS required)")
+		return &cliError{Code: "UNSUPPORTED_AUTH", Message: "This authentication source is not supported (CAS required).", exit: 3}
 	}
 	nonce, err := control.UUID()
 	if err != nil {
@@ -131,8 +132,10 @@ func (a *application) runSSO(args []string) error {
 	if err := writeAuth(*path, &s); err != nil {
 		return err
 	}
-	fmt.Printf("Open in your browser (valid 10 minutes):\n%s\n\nAfter the redirect, cancel any request to open iOA. Import the full callback URL with:\nsvpn-cli auth finish --state %s\nThe terminal prompt hides the callback URL. Do not post it in chat.\n", u.String(), *path)
-	return nil
+	return a.result("auth sso", "Open in your browser (valid 10 minutes):\n"+u.String()+"\n\nAfter the redirect, cancel any request to open iOA. Import the HTTPS callback using auth finish --callback-file or the hidden terminal prompt. Do not post it in chat.", map[string]any{
+		"state_file": *path, "login_url": u.String(), "expires_at": s.PendingSSO.ExpiresAt,
+		"next_action": nextAction{Kind: "browser_login", Message: "A user must complete browser login/MFA, then supply the HTTPS callback via a private file or explicit stdin."},
+	})
 }
 
 func parseSSOCallback(raw string, pending *pendingSSO, now time.Time) (string, error) {
@@ -168,11 +171,19 @@ func (a *application) runSSOFinish(args []string) error {
 	f := a.newFlagSet("auth finish")
 	path := f.String("state", "private/auth.json", "private device state")
 	callbackFile := f.String("callback-file", "", "0600 file containing full callback URL (otherwise hidden terminal prompt)")
+	callbackStdin := f.Bool("callback-stdin", false, "read callback URL from stdin until EOF; never echo it")
 	if err := a.parseFlags(f, args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {
-		return errors.New("unexpected positional arguments")
+		return usageError("unexpected positional arguments")
+	}
+	if *callbackFile != "" && *callbackStdin {
+		return usageError("provide only one of --callback-file and --callback-stdin")
+	}
+	if (a.json || a.nonInteractive) && *callbackFile == "" && !*callbackStdin {
+		return &cliError{Code: "INTERACTION_REQUIRED", Message: "Supply the HTTPS SSO callback using --callback-file or --callback-stdin; interactive input is disabled.", exit: 3,
+			NextAction: &nextAction{Kind: "supply_callback", Message: "Complete browser login/MFA, then provide the callback through a private file or stdin."}}
 	}
 	s, err := readAuth(*path)
 	if err != nil {
@@ -181,6 +192,9 @@ func (a *application) runSSOFinish(args []string) error {
 	c, err := deviceClient(&s)
 	if err != nil {
 		return err
+	}
+	if s.PendingSSO == nil || !time.Now().Before(s.PendingSSO.ExpiresAt) {
+		return authRequired("no pending SSO request or request expired; run auth sso again")
 	}
 	var raw []byte
 	if *callbackFile != "" {
@@ -191,11 +205,16 @@ func (a *application) runSSOFinish(args []string) error {
 		defer file.Close()
 		info, err := file.Stat()
 		if err != nil || privatefs.Check(file) != nil || info.Size() > 8192 {
-			return errors.New("callback file must be a private regular file smaller than 8 KiB")
+			return &cliError{Code: "INVALID_CALLBACK_FILE", Message: "Callback file must be a private regular file smaller than 8 KiB.", exit: 4}
 		}
 		raw, err = io.ReadAll(io.LimitReader(file, 8193))
 		if err != nil {
 			return errors.New("cannot read callback file")
+		}
+	} else if *callbackStdin {
+		raw, err = io.ReadAll(io.LimitReader(os.Stdin, 8193))
+		if err != nil || len(raw) > 8192 {
+			return usageError("cannot read callback from stdin or input exceeds 8 KiB")
 		}
 	} else {
 		raw, err = readCallbackInput()
@@ -205,7 +224,7 @@ func (a *application) runSSOFinish(args []string) error {
 	}
 	code, err := parseSSOCallback(string(raw), s.PendingSSO, time.Now())
 	if err != nil {
-		return err
+		return &cliError{Code: "INVALID_CALLBACK", Message: err.Error(), exit: 2}
 	}
 	pending := *s.PendingSSO
 	// One callback attempt per random state; do not silently reuse CAS tickets.
@@ -227,13 +246,14 @@ func (a *application) runSSOFinish(args []string) error {
 		}
 	}
 	if callErr != nil {
-		return callErr
+		return remoteFailure(callErr)
 	}
 	var mfa bool
 	json.Unmarshal(result["need_mfa"], &mfa)
 	if mfa {
-		return errors.New("SSO accepted; an additional authkeeper MFA step is required (response saved privately)")
+		return &cliError{Code: "INTERACTION_REQUIRED", Message: "An additional authentication challenge is required; the response was saved privately. This challenge is not supported yet.", exit: 3,
+			NextAction: &nextAction{Kind: "human_authentication"}}
 	}
-	fmt.Println("SSO accepted for this device; login response saved privately. Native ticket exchange still needs verification.")
-	return nil
+	return a.result("auth finish", "SSO accepted for this device; login response saved privately. Run auth exchange next.", map[string]any{"state_file": *path, "response_saved": true,
+		"next_action": nextAction{Kind: "run_command", Argv: []string{"svpn-cli", "--json", "auth", "exchange", "--state", *path}}})
 }

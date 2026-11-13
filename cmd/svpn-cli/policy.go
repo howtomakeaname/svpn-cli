@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"strconv"
 	"time"
 )
@@ -18,7 +16,7 @@ func (a *application) runPolicy(args []string) error {
 		return err
 	}
 	if f.NArg() != 0 {
-		return errors.New("unexpected positional arguments")
+		return usageError("unexpected positional arguments")
 	}
 	s, err := readAuth(*path)
 	if err != nil {
@@ -33,7 +31,7 @@ func (a *application) runPolicy(args []string) error {
 		UserId string
 	}
 	if json.Unmarshal(s.Exchange["data"], &data) != nil || data.Id <= 0 {
-		return errors.New("an exchanged login identity is required")
+		return authRequired("an exchanged login identity is required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -52,8 +50,7 @@ func (a *application) runPolicy(args []string) error {
 		}
 	}
 	if callErr != nil {
-		return callErr
+		return remoteFailure(callErr)
 	}
-	fmt.Println("Device policy response saved privately.")
-	return nil
+	return a.result("policy", "Device policy response saved privately.", map[string]any{"output_file": *output, "host_policy": *hostPolicy, "response_saved": true})
 }

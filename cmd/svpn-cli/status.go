@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"time"
 )
 
@@ -15,7 +13,7 @@ func (a *application) runAuthStatus(args []string) error {
 		return err
 	}
 	if f.NArg() != 0 {
-		return errors.New("unexpected positional arguments")
+		return usageError("unexpected positional arguments")
 	}
 	s, err := readAuth(*path)
 	if err != nil {
@@ -30,7 +28,7 @@ func (a *application) runAuthStatus(args []string) error {
 		TicketType                                 int
 	}
 	if json.Unmarshal(s.Exchange["data"], &data) != nil || data.Ticket == "" || data.DeviceId != s.MID {
-		return errors.New("device login ticket required")
+		return authRequired("device login ticket required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -46,8 +44,7 @@ func (a *application) runAuthStatus(args []string) error {
 		}
 	}
 	if callErr != nil {
-		return callErr
+		return remoteFailure(callErr)
 	}
-	fmt.Println("Login ticket status response saved privately.")
-	return nil
+	return a.result("auth status", "Login ticket status response saved privately.", map[string]any{"state_file": *path, "response_saved": true, "credential_validity": "not_interpreted"})
 }

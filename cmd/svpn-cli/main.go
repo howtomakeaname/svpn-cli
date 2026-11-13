@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
+	"strconv"
 	"syscall"
 
 	"github.com/howtomakeaname/svpn-cli/internal/engine"
@@ -19,9 +20,30 @@ import (
 )
 
 func (a *application) run(args []string) error {
-	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
-		fmt.Println(versionString())
-		return nil
+	if len(args) == 0 {
+		return a.showHelp(a.newFlagSet(""))
+	}
+	if args[0] == "version" {
+		f := a.newFlagSet("version")
+		if err := a.parseFlags(f, args[1:]); err != nil {
+			return err
+		}
+		if f.NArg() != 0 {
+			return usageError("version takes no positional arguments")
+		}
+		return a.result("version", versionString(), map[string]any{"version": version, "commit": commit, "build_date": buildDate, "os": runtime.GOOS, "arch": runtime.GOARCH})
+	}
+	if args[0] == "help" {
+		f := a.newFlagSet("")
+		if err := a.parseFlags(f, args[1:]); err != nil {
+			return err
+		}
+		if f.NArg() == 0 {
+			return a.showHelp(f)
+		}
+		// Help traverses the same parsers as execution, so it cannot drift from
+		// implemented flags and never performs network or filesystem mutations.
+		return a.run(append(append([]string{}, f.Args()...), "--help"))
 	}
 	if len(args) > 0 && args[0] == "policy" {
 		return a.runPolicy(args[1:])
@@ -32,50 +54,80 @@ func (a *application) run(args []string) error {
 	if len(args) > 0 && args[0] == "auth" {
 		return a.runAuth(args[1:])
 	}
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
-		fmt.Println("svpn-cli: independent experimental iOA TCP client\n\nCommands: auth init|sso|finish|exchange|status, policy, ticket, check, connect, serve\nUse 'svpn-cli COMMAND --help' for options.\n\nconnect/serve --state FILE: fetch policy and obtain resource tickets automatically.\nserve --mode vpn-only: VPN resources only, for mihomo/upstream routing.\nserve --mode auto: policy-selected VPN resources; unmatched destinations direct.\nBoth modes fail closed on protected ports, policy errors and VPN rejection.\nAn explicit --session FILE remains available for transport diagnostics.")
-		return nil
-	}
-	if len(args) == 0 {
-		return errors.New("usage: svpn-cli auth init|sso|finish|exchange|status OR connect|serve --state FILE (experimental)")
-	}
 	command := args[0]
 	if command != "check" && command != "connect" && command != "serve" {
-		return errors.New("unknown command: use auth, check, connect or serve")
+		return usageError("Unknown command; use svpn-cli --help.")
 	}
 	flags := a.newFlagSet(command)
-	headerOptions := addHeaderFlags(flags)
 	sessionPath := flags.String("session", "", "private JSON file with already-issued resource tickets")
-	statePath := flags.String("state", "", "private device login state; enables automatic policy and resource ticket acquisition")
-	mode := flags.String("mode", "vpn-only", "routing mode with --state: vpn-only or auto")
-	pin := flags.String("certificate-sha256", "", "explicit gateway leaf certificate trust anchor; verify its fingerprint independently")
-	caFile := flags.String("gateway-ca", "", "additional gateway CA PEM file")
-	diagnostic := flags.String("diagnostic", "", "connect only: save gateway refusal response to a private JSON file")
-	httpAddr := flags.String("http", "127.0.0.1:17890", "HTTP listener; empty disables it")
-	socksAddr := flags.String("socks", "127.0.0.1:17891", "SOCKS5 listener; empty disables it")
-	limit := flags.Int("max-connections", 128, "maximum concurrent proxy requests")
+	var statePath, pin, caFile, diagnostic string
+	mode, httpAddr, socksAddr, limit := "vpn-only", "127.0.0.1:17890", "127.0.0.1:17891", 128
+	var headerOptions headerFlags
+	if command != "check" {
+		headerOptions = addHeaderFlags(flags)
+		flags.StringVar(&statePath, "state", "", "private login state; enables automatic policy and ticket acquisition")
+		flags.StringVar(&mode, "mode", mode, "routing with --state: vpn-only or auto")
+		flags.StringVar(&pin, "certificate-sha256", "", "explicit gateway leaf certificate trust anchor; verify independently")
+		flags.StringVar(&caFile, "gateway-ca", "", "additional gateway CA PEM file")
+	}
+	if command == "connect" {
+		flags.StringVar(&diagnostic, "diagnostic", "", "save gateway refusal response to a private JSON file")
+	}
+	if command == "serve" {
+		flags.StringVar(&httpAddr, "http", httpAddr, "HTTP loopback listener; empty disables, port 0 auto-selects")
+		flags.StringVar(&socksAddr, "socks", socksAddr, "SOCKS5 loopback listener; empty disables, port 0 auto-selects")
+		flags.IntVar(&limit, "max-connections", limit, "maximum concurrent proxy requests, 1..4096")
+	}
 	if err := a.parseFlags(flags, args[1:]); err != nil {
 		return err
 	}
-	if (*sessionPath == "") == (*statePath == "") {
-		return errors.New("provide exactly one of --state or --session")
+	if (*sessionPath == "") == (statePath == "") {
+		return usageError("provide exactly one of --state or --session")
 	}
 	if command == "check" {
 		if flags.NArg() != 0 || *sessionPath == "" {
-			return errors.New("check requires --session and no positional arguments")
+			return usageError("check requires --session and no positional arguments")
 		}
-		session, err := native.LoadSession(*sessionPath)
+		session, err := loadSession(*sessionPath)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Session format valid: %d resources; expires %s. Gateway connectivity and authentication have NOT been tested.\n", len(session.Resources), session.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"))
-		return nil
+		return a.result("check", fmt.Sprintf("Session format valid: %d resources; expires %s. Connectivity has not been tested.", len(session.Resources), session.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")), map[string]any{"resource_count": len(session.Resources), "expires_at": session.ExpiresAt, "connectivity_tested": false})
+	}
+	if mode != "vpn-only" && mode != "auto" {
+		return usageError("--mode must be vpn-only or auto")
+	}
+	if *sessionPath != "" && (mode != "vpn-only" || pin != "" || caFile != "") {
+		return usageError("mode and gateway trust flags require --state; session files contain their own trust settings")
+	}
+	if command == "connect" {
+		if flags.NArg() != 2 {
+			return usageError("connect requires HOST PORT after its options")
+		}
+		if _, err := native.CanonicalAddress(net.JoinHostPort(flags.Arg(0), flags.Arg(1))); err != nil {
+			return usageError("connect requires a valid HOST and a numeric PORT in 1..65535")
+		}
+	} else if flags.NArg() != 0 || limit < 1 || limit > 4096 || (httpAddr == "" && socksAddr == "") {
+		return usageError("serve takes no positional arguments, requires a listener, and --max-connections must be 1..4096")
+	}
+	if command == "serve" {
+		for _, address := range []string{httpAddr, socksAddr} {
+			if address == "" {
+				continue
+			}
+			host, port, err := net.SplitHostPort(address)
+			ip := net.ParseIP(host)
+			p, portErr := strconv.Atoi(port)
+			if err != nil || ip == nil || !ip.IsLoopback() || portErr != nil || p < 0 || p > 65535 {
+				return usageError("listeners require a literal loopback IP and numeric port in 0..65535")
+			}
+		}
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	var dial proxy.DialFunc
-	if *statePath != "" {
-		e, err := loginEngine(*statePath, *pin, *caFile)
+	if statePath != "" {
+		e, err := loginEngine(statePath, pin, caFile)
 		if err != nil {
 			return err
 		}
@@ -84,19 +136,16 @@ func (a *application) run(args []string) error {
 			return err
 		}
 		defer e.Client.HTTP.CloseIdleConnections()
-		router, err := routing.New(*mode, e.FetchPolicy, e.DialContext)
+		router, err := routing.New(mode, e.FetchPolicy, e.DialContext)
 		if err != nil {
 			return err
 		}
 		if _, err := router.Policy(ctx); err != nil {
-			return fmt.Errorf("initial resource policy: %w", err)
+			return remoteFailure(err)
 		}
 		dial = router.DialContext
 	} else {
-		if *mode != "vpn-only" || *pin != "" || *caFile != "" {
-			return errors.New("mode and gateway trust flags require --state; session files contain their own trust settings")
-		}
-		session, err := native.LoadSession(*sessionPath)
+		session, err := loadSession(*sessionPath)
 		if err != nil {
 			return err
 		}
@@ -111,18 +160,18 @@ func (a *application) run(args []string) error {
 		dial = dialer.DialContext
 	}
 	if command == "connect" {
-		if flags.NArg() != 2 {
-			return errors.New("usage: svpn-cli connect (--state FILE | --session FILE) HOST PORT")
-		}
 		conn, err := dial(ctx, "tcp", net.JoinHostPort(flags.Arg(0), flags.Arg(1)))
 		if err != nil {
 			var gatewayErr *native.GatewayError
-			if *diagnostic != "" && errors.As(err, &gatewayErr) {
-				if saveErr := writePrivateJSON(*diagnostic, gatewayErr); saveErr != nil {
+			if diagnostic != "" && errors.As(err, &gatewayErr) {
+				if saveErr := writePrivateJSON(diagnostic, gatewayErr); saveErr != nil {
 					return saveErr
 				}
 			}
-			return err
+			if errors.As(err, &gatewayErr) {
+				return err
+			}
+			return remoteFailure(err)
 		}
 		defer conn.Close()
 		stop := context.AfterFunc(ctx, func() { conn.Close() })
@@ -133,16 +182,16 @@ func (a *application) run(args []string) error {
 				cw.CloseWrite()
 			}
 		}()
-		_, err = io.Copy(os.Stdout, conn)
+		_, err = io.Copy(a.out, conn)
 		return err
 	}
-	if flags.NArg() != 0 || *limit < 1 || *limit > 4096 {
-		return errors.New("serve takes no positional arguments; max-connections must be 1..4096")
-	}
-	if *httpAddr == "" && *socksAddr == "" {
-		return errors.New("enable at least one listener")
-	}
-	server := proxy.New(dial, *limit)
+	return a.serve(ctx, dial, mode, httpAddr, socksAddr, limit)
+}
+
+func (a *application) serve(ctx context.Context, dial proxy.DialFunc, mode, httpAddr, socksAddr string, limit int) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	server := proxy.New(dial, limit)
 	type endpoint struct {
 		name     string
 		listener net.Listener
@@ -157,19 +206,32 @@ func (a *application) run(args []string) error {
 	for _, e := range []struct {
 		name, address string
 		serve         func(context.Context, net.Listener) error
-	}{{"HTTP", *httpAddr, server.ServeHTTP}, {"SOCKS5", *socksAddr, server.ServeSOCKS}} {
+	}{{"HTTP", httpAddr, server.ServeHTTP}, {"SOCKS5", socksAddr, server.ServeSOCKS}} {
 		if e.address == "" {
 			continue
 		}
 		listener, err := proxy.ListenLocal(e.address)
 		if err != nil {
-			return err
+			return &cliError{Code: "LISTENER_FAILED", Message: "Cannot bind a local proxy listener; check its address and port availability.", exit: 4, cause: err}
 		}
 		endpoints = append(endpoints, endpoint{e.name, listener, e.serve})
 	}
+	listeners := make(map[string]string, len(endpoints))
+	for _, e := range endpoints {
+		listeners[e.name] = e.listener.Addr().String()
+	}
+	// Bind every requested listener before publishing readiness. The event means
+	// ingress is bound (and initial policy was fetched), not that a target was dialed.
+	if a.json {
+		if err := a.event("serve", "ready", map[string]any{"listeners": listeners, "mode": mode, "target_connectivity_tested": false}); err != nil {
+			return err
+		}
+	}
 	results := make(chan error, len(endpoints))
 	for _, e := range endpoints {
-		fmt.Fprintf(os.Stderr, "%s listening on %s (routing: %s; independent experimental TCP transport)\n", e.name, e.listener.Addr(), *mode)
+		if !a.json {
+			fmt.Fprintf(a.errOut, "%s listening on %s (routing: %s; experimental TCP transport)\n", e.name, e.listener.Addr(), mode)
+		}
 		go func() { results <- e.serve(ctx, e.listener) }()
 	}
 	first := <-results
@@ -179,7 +241,18 @@ func (a *application) run(args []string) error {
 			first = err
 		}
 	}
+	if first == nil && a.json {
+		return a.event("serve", "stopped", map[string]any{"reason": "shutdown"})
+	}
 	return first
+}
+
+func loadSession(path string) (*native.Session, error) {
+	s, err := native.LoadSession(path)
+	if err != nil && !os.IsNotExist(err) && !os.IsPermission(err) {
+		return nil, &cliError{Code: "INVALID_SESSION", Message: "Cannot load a valid, unexpired private session file.", exit: 4, cause: err}
+	}
+	return s, err
 }
 
 func loginEngine(path, pin, caFile string) (*engine.Engine, error) {
@@ -193,11 +266,11 @@ func loginEngine(path, pin, caFile string) (*engine.Engine, error) {
 	}
 	var identity engine.Identity
 	if json.Unmarshal(s.Exchange["data"], &identity) != nil {
-		return nil, errors.New("exchanged login identity required; run auth finish and auth exchange")
+		return nil, authRequired("exchanged login identity required; run auth finish and auth exchange")
 	}
 	e, err := engine.New(c, identity)
 	if err != nil {
-		return nil, err
+		return nil, authRequired("a valid device-bound exchanged login identity is required")
 	}
 	e.CertificateSHA256 = pin
 	e.CAFile = caFile
@@ -205,11 +278,5 @@ func loginEngine(path, pin, caFile string) (*engine.Engine, error) {
 }
 
 func main() {
-	if err := (&application{}).run(os.Args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return
-		}
-		fmt.Fprintln(os.Stderr, "svpn-cli:", err)
-		os.Exit(1)
-	}
+	os.Exit(execute(os.Args[1:], os.Stdout, os.Stderr))
 }

@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"time"
 )
 
@@ -15,7 +13,7 @@ func (a *application) runExchange(args []string) error {
 		return err
 	}
 	if f.NArg() != 0 {
-		return errors.New("unexpected positional arguments")
+		return usageError("unexpected positional arguments")
 	}
 	s, err := readAuth(*path)
 	if err != nil {
@@ -34,12 +32,12 @@ func (a *application) runExchange(args []string) error {
 	json.Unmarshal(s.Login["mid"], &mid)
 	json.Unmarshal(s.Registration["CompanyId"], &company)
 	if uid == "" || ticket == "" || mid != s.MID || ticketType != 2 || kind != "Linux" {
-		return errors.New("a device-bound Linux login ticket of type 2 is required")
+		return authRequired("a device-bound Linux login ticket of type 2 is required")
 	}
 	var domain string
 	json.Unmarshal(s.Login["domain_id"], &domain)
 	if domain == "" {
-		return errors.New("login ticket has no domain")
+		return authRequired("login ticket has no domain")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -55,8 +53,7 @@ func (a *application) runExchange(args []string) error {
 		}
 	}
 	if callErr != nil {
-		return callErr
+		return remoteFailure(callErr)
 	}
-	fmt.Println("Device login ticket exchange response saved privately.")
-	return nil
+	return a.result("auth exchange", "Device login ticket exchange response saved privately.", map[string]any{"state_file": *path, "response_saved": true, "next_action": nextAction{Kind: "run_command", Argv: []string{"svpn-cli", "--json", "serve", "--state", *path}}})
 }

@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"github.com/howtomakeaname/svpn-cli/internal/control"
 	"github.com/howtomakeaname/svpn-cli/internal/native"
 	"github.com/howtomakeaname/svpn-cli/internal/privatefs"
@@ -48,14 +46,14 @@ func (a *application) runTicket(args []string) error {
 		return err
 	}
 	if f.NArg() != 0 {
-		return errors.New("unexpected positional arguments")
+		return usageError("unexpected positional arguments")
 	}
 	if *area == "" {
-		return errors.New("--area is required from the issued resource policy")
+		return usageError("--area is required from the issued resource policy")
 	}
 	address, err := native.CanonicalAddress(*target)
 	if err != nil {
-		return errors.New("--target must be an explicit host:port")
+		return usageError("--target must be an explicit host:port")
 	}
 	s, err := readAuth(*path)
 	if err != nil {
@@ -73,7 +71,7 @@ func (a *application) runTicket(args []string) error {
 		TicketType int
 	}
 	if json.Unmarshal(s.Exchange["data"], &data) != nil || data.DeviceId != s.MID || data.UserId == "" || data.Ticket == "" || data.TicketType != 0 {
-		return errors.New("a device-bound exchanged login ticket is required")
+		return authRequired("a device-bound exchanged login ticket is required")
 	}
 	id, err := control.UUID()
 	if err != nil {
@@ -104,8 +102,7 @@ func (a *application) runTicket(args []string) error {
 		}
 	}
 	if callErr != nil {
-		return callErr
+		return remoteFailure(callErr)
 	}
-	fmt.Printf("Resource ticket response saved privately to %s; action and grants need verification before connecting.\n", *output)
-	return nil
+	return a.result("ticket", "Resource ticket response saved privately; verify grants before connecting.", map[string]any{"output_file": *output, "response_saved": true, "grant_validated": false})
 }
