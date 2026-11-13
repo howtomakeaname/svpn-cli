@@ -30,6 +30,7 @@ var commandSpecs = []commandSpec{
 	{"check", "Validate a private session file locally; does not test connectivity.", "check --session FILE", []string{"read_private_session"}, nil},
 	{"connect", "Relay raw TCP on stdin/stdout, suitable for SSH ProxyCommand.", "connect (--state FILE | --session FILE) [OPTIONS] HOST PORT", []string{"network", "issue_ticket", "raw_tcp_stream"}, []string{"ssh -o 'ProxyCommand=svpn-cli connect --state /absolute/path/private/auth.json %h %p' user@ssh.internal.example"}},
 	{"serve", "Run loopback HTTP/SOCKS5 TCP proxies; JSON emits ready/stopped events.", "serve (--state FILE | --session FILE) [--mode vpn-only|auto] [OPTIONS]", []string{"network", "issue_ticket", "listen_loopback", "long_running"}, []string{"svpn-cli --json serve --state private/auth.json --mode auto --http 127.0.0.1:0 --socks ''"}},
+	{"forward", "Forward a local loopback TCP port to an authorized remote endpoint.", "forward (--state FILE | --session FILE) --target HOST:PORT [--listen IP:PORT] [OPTIONS]", []string{"network", "issue_ticket", "listen_loopback", "long_running"}, []string{"svpn-cli --json forward --state private/auth.json --listen 127.0.0.1:8888 --target notebook.internal.example:8888"}},
 	{"version", "Show build version, commit, platform and date.", "version", []string{}, nil},
 }
 

@@ -53,6 +53,9 @@ func (a *application) run(args []string) error {
 	if len(args) > 0 && args[0] == "auth" {
 		return a.runAuth(args[1:])
 	}
+	if args[0] == "forward" {
+		return a.runForward(args[1:])
+	}
 	command := args[0]
 	if command != "check" && command != "connect" && command != "serve" {
 		return usageError("Unknown command; use svpn-cli --help.")
