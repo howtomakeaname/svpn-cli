@@ -1,28 +1,23 @@
-Experimental svpn-cli release with an automation interface for agents.
+Experimental svpn-cli release adding UDP, Linux TUN and explicit TLCP gateway transport.
 
-- Versioned `--json` results, redacted errors and categorized exit codes.
-- Text and JSON command discovery, including flags, examples and execution effects.
-- Read-only `auth inspect` with local login stages and next actions.
-- Explicit non-interactive callback import via private file or stdin; browser login/MFA remains user-driven.
-- NDJSON proxy readiness/shutdown events with actual dynamically assigned listener ports.
-- Raw `connect` stdout remains compatible with SSH ProxyCommand, including in JSON mode.
-- `forward` maps a local loopback TCP port to an authorized remote service.
-- `reverse` maps a remote SSH loopback port to a local service over VPN + native Go SSH, with strict known_hosts verification and private credential files.
-- Both forwarding commands emit readiness/shutdown events, bound concurrent streams, and close active connections on shutdown; automatic reconnection is not implemented.
-- SSH negotiation prefers host key types already recorded in known_hosts while still verifying the actual server key; default personal identities and SSH agents are never loaded implicitly.
+- SOCKS5 UDP ASSOCIATE with preserved datagram boundaries, client endpoint binding, bounded flows and cleanup when the control TCP connection closes.
+- Independent TCP/UDP policy matching and ticket caches. Protected protocol/port denials never fall back to direct routing.
+- Linux TUN IPv4/IPv6 TCP/UDP ingress, including inherited descriptors for isolated application namespaces. This first mode requires vpn-only; routes, addresses and DNS are configured externally.
+- Opt-in gateway TLCP 1.1 with SM2/SM3 and SM4 GCM/CBC. Explicit CA trust verifies both signing and encryption certificates. Single-leaf pins and fallback to ordinary TLS are refused.
+- Read-only capabilities discovery for agents, distinguishing platform features from unprobed deployment compatibility.
 
-Core access features:
+The existing browser SSO/MFA handoff, structured JSON/NDJSON interface, policy-based proxy modes, raw SSH ProxyCommand, local TCP forwarding and verified SSH reverse forwarding remain available.
 
-- Browser SSO/MFA handoff, private device state and per-resource access tickets.
-- Loopback HTTP CONNECT, ordinary HTTP and SOCKS5 TCP proxies.
-- `vpn-only` for upstream routing and `auto` for policy-based VPN/direct routing.
-- Configurable compatibility headers, explicit TLS trust and fail-closed routing.
-- Linux/macOS/Windows builds for amd64 and arm64; each archive includes license notices and examples.
+Validation includes three native operating-system test/race/vet jobs, six OS/architecture packages, and an independent GmSSL 3.2.0 interoperability CI job. Linux live validation recorded 300 successful transfer batches, 450 successful repeated DNS queries, TCP/UDP policy refusal and temporary-resource cleanup. Local GmSSL validation separately verified five 8 MiB echo batches per cipher suite; it does not establish compatibility with a production national-crypto gateway.
 
-All three operating systems run native unit, race and vet checks in CI. Live VPN/SSH integration has been verified on Linux; macOS and Windows deployment compatibility still needs real-session validation.
+The bundled docs/performance-v0.3.md includes arithmetic means, sample standard deviations, medians, effective counts and sanitized per-batch data. It describes one variable network path, not a throughput guarantee.
 
-The bundled `docs/performance.md` records repeated Linux live measurements with per-batch CSV data, arithmetic means, sample standard deviations, medians and observed failures. HTTP, SOCKS5, HTTPS CONNECT and both forwarding directions were exercised at 1/4/16 concurrent streams. Ordinary HTTP currently opens a new upstream connection for every request; use a persistent TCP transport when application connection reuse matters. The measurements describe one variable network path, not a throughput guarantee.
+Limitations:
 
-This release supports TCP only. Active tunnels currently expire with their resource ticket. Automatic TGT renewal, UDP, TUN and deployment-specific additional challenges are not supported. Binaries are not platform code-signed or notarized.
+- UDP is framed over TLS/TCP; raw UDP/QUIC/WireGuard transports are not implemented.
+- TUN device access is Linux-only. Domain-aware TUN auto mode, DNS interception, fake-IP and ICMP are not implemented.
+- SPA packet authorization and RFC 8998 national-crypto TLS 1.3 are not implemented. TLCP client-certificate authentication is not provided; control-plane SSO/API still uses ordinary HTTPS.
+- Real VPN sessions on macOS/Windows and real TLCP gateway deployments still need validation.
+- Resource tickets still bound active tunnel lifetime. Automatic TGT renewal, deployment-specific additional challenges and automatic reconnection are not implemented.
 
-Verify the downloaded archive with `SHA256SUMS.txt`. Never share your authentication state or callback URL.
+Linux/macOS/Windows archives are supplied for amd64 and arm64, with dependency notices and examples. Binaries are not platform code-signed or notarized. Verify downloads using SHA256SUMS.txt and keep authentication state private.
