@@ -118,7 +118,11 @@ svpn-cli --json reverse --state private/auth.json \
 
 SSH 服务端须允许远程 TCP 转发。CLI 使用原生 Go SSH，无需外部 `ssh` 命令或额外 frp 服务；SSH 凭据与 VPN 登录独立。可用 `--password-file` 替代私钥，或用 `--key-passphrase-file` 解密加密私钥；凭据文件须符合私密权限要求。主机密钥必须匹配已核实的 `known_hosts`，不提供跳过检查的选项。
 
+为自动化配置 SSH 凭据时，可使用独立私钥文件和中性备注，通过 `--identity-file` 明确指定路径；CLI 不隐式读取默认私钥或 SSH agent。主机密钥协商优先匹配 `known_hosts` 已记录的类型，仍严格检查实际密钥。
+
 两个命令均保持前台运行，输出 NDJSON `ready` / `stopped` 事件；`ready.data.listen` 给出实际端口，`--listen 127.0.0.1:0` 可动态分配。`forward` 每个连接按 VPN 策略取票，默认 `vpn-only`；`reverse` 通过一条 VPN + SSH 连接复用流量。监听请求限制为回环地址，反向转发的本机目标也限制为回环地址，实际远程开放范围仍受 SSH 服务端配置控制。两者均支持并发限制和关闭清理，当前不自动重连；单个流连接失败会关闭该流，进程继续监听。
+
+普通 HTTP 代理当前不复用上游连接；频繁小请求若需要连接复用，可使用 SOCKS5、HTTPS CONNECT 或固定端口转发。实测方式、数据及限制见 [性能记录](docs/performance.md)。
 
 ## TLS 与请求头
 
