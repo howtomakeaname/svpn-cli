@@ -29,9 +29,10 @@ var commandSpecs = []commandSpec{
 	{"ticket", "Diagnostic: request a resource ticket using an issued policy area.", "ticket --target HOST:PORT --area ID [--set-id ID] [--state FILE] [--output FILE]", []string{"network", "issue_ticket", "write_private_ticket"}, nil},
 	{"check", "Validate a private session file locally; does not test connectivity.", "check --session FILE", []string{"read_private_session"}, nil},
 	{"connect", "Relay raw TCP on stdin/stdout, suitable for SSH ProxyCommand.", "connect (--state FILE | --session FILE) [OPTIONS] HOST PORT", []string{"network", "issue_ticket", "raw_tcp_stream"}, []string{"ssh -o 'ProxyCommand=svpn-cli connect --state /absolute/path/private/auth.json %h %p' user@ssh.internal.example"}},
-	{"serve", "Run loopback HTTP/SOCKS5 TCP proxies; JSON emits ready/stopped events.", "serve (--state FILE | --session FILE) [--mode vpn-only|auto] [OPTIONS]", []string{"network", "issue_ticket", "listen_loopback", "long_running"}, []string{"svpn-cli --json serve --state private/auth.json --mode auto --http 127.0.0.1:0 --socks ''"}},
+	{"serve", "Run loopback HTTP TCP and SOCKS5 TCP/UDP proxies; JSON emits ready/stopped events.", "serve (--state FILE | --session FILE) [--mode vpn-only|auto] [OPTIONS]", []string{"network", "issue_ticket", "listen_loopback", "long_running"}, []string{"svpn-cli --json serve --state private/auth.json --mode auto --http 127.0.0.1:0 --socks ''"}},
 	{"forward", "Forward a local loopback TCP port to an authorized remote endpoint.", "forward (--state FILE | --session FILE) --target HOST:PORT [--listen IP:PORT] [OPTIONS]", []string{"network", "issue_ticket", "listen_loopback", "long_running"}, []string{"svpn-cli --json forward --state private/auth.json --listen 127.0.0.1:8888 --target notebook.internal.example:8888"}},
 	{"reverse", "Forward a remote SSH loopback port to a local service through VPN + SSH.", "reverse (--state FILE | --session FILE) --ssh-host HOST:PORT --ssh-user USER --known-hosts FILE (--identity-file FILE | --password-file FILE) --target IP:PORT [--listen IP:PORT]", []string{"network", "issue_ticket", "ssh_authentication", "listen_remote_loopback", "long_running"}, []string{"svpn-cli --json reverse --state private/auth.json --ssh-host ssh.internal.example:22 --ssh-user USER --known-hosts /path/to/known_hosts --identity-file /path/to/id_ed25519 --listen 127.0.0.1:9000 --target 127.0.0.1:3000"}},
+	{"tun", "Run a Linux TUN packet ingress; addresses, routes and DNS are configured externally.", "tun (--state FILE | --session FILE) (--device NAME | --fd NUMBER) [OPTIONS]", []string{"network", "issue_ticket", "open_tun_device", "long_running"}, []string{"svpn-cli --json tun --state private/auth.json --device svpn0 --mode vpn-only"}},
 	{"version", "Show build version, commit, platform and date.", "version", []string{}, nil},
 }
 
@@ -93,7 +94,7 @@ func (a *application) showHelp(f *flag.FlagSet) error {
 		if a.json {
 			return a.result("help", "", map[string]any{"commands": commands, "global_flags": helpFlags(f), "discovery": "svpn-cli --json help COMMAND [SUBCOMMAND]", "exit_codes": map[string]int{"success": 0, "operation_failed": 1, "invalid_argument": 2, "authentication_or_interaction_required": 3, "local_file_error": 4, "remote_request_failed": 5}})
 		}
-		fmt.Fprintln(a.out, "svpn-cli: experimental iOA / SVPN TCP client\n\nUsage: svpn-cli [--json] [--non-interactive] COMMAND [OPTIONS]")
+		fmt.Fprintln(a.out, "svpn-cli: experimental iOA / SVPN client\n\nUsage: svpn-cli [--json] [--non-interactive] COMMAND [OPTIONS]")
 		for _, spec := range commands {
 			fmt.Fprintf(a.out, "  %-15s %s\n", spec.Name, spec.Summary)
 		}
