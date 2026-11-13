@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/howtomakeaname/svpn-cli?include_prereleases)](https://github.com/howtomakeaname/svpn-cli/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个面向腾讯 iOA / SVPN 的轻量跨平台 CLI 适配客户端：通过浏览器完成 SSO/MFA，按资源获取访问票据，为 SSH、HTTP 和 HTTPS 应用提供本地 HTTP/SOCKS5 TCP 代理，支持按组织策略分流及 mihomo / Clash 集成。
+一个面向 iOA / SVPN 的轻量跨平台 CLI 适配客户端：通过浏览器完成 SSO/MFA，按资源获取访问票据，为 SSH、HTTP 和 HTTPS 应用提供本地 HTTP/SOCKS5 TCP 代理，支持按组织策略分流及 mihomo / Clash 集成。
 
 ![svpn-cli 的控制面与两种代理模式](docs/assets/architecture.png)
 

@@ -91,7 +91,7 @@ func (a *application) showHelp(f *flag.FlagSet) error {
 		if a.json {
 			return a.result("help", "", map[string]any{"commands": commands, "global_flags": helpFlags(f), "discovery": "svpn-cli --json help COMMAND [SUBCOMMAND]", "exit_codes": map[string]int{"success": 0, "operation_failed": 1, "invalid_argument": 2, "authentication_or_interaction_required": 3, "local_file_error": 4, "remote_request_failed": 5}})
 		}
-		fmt.Fprintln(a.out, "svpn-cli: experimental Tencent iOA / SVPN TCP client\n\nUsage: svpn-cli [--json] [--non-interactive] COMMAND [OPTIONS]")
+		fmt.Fprintln(a.out, "svpn-cli: experimental iOA / SVPN TCP client\n\nUsage: svpn-cli [--json] [--non-interactive] COMMAND [OPTIONS]")
 		for _, spec := range commands {
 			fmt.Fprintf(a.out, "  %-15s %s\n", spec.Name, spec.Summary)
 		}
