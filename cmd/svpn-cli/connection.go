@@ -53,6 +53,7 @@ func (o connectionOptions) open(ctx context.Context) (proxy.DialFunc, func(), er
 		}
 		router, err := routing.New(o.mode, e.FetchPolicy, e.DialContext)
 		if err == nil {
+			router.UDP = e.DialUDPContext
 			_, err = router.Policy(ctx)
 		}
 		if err != nil {

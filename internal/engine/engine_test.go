@@ -129,3 +129,54 @@ func TestRefuseInvalidOrRedirectedGrant(t *testing.T) {
 		})
 	}
 }
+
+func TestTCPAndUDPHaveIndependentIssuedClaimsAndGrantCaches(t *testing.T) {
+	gateway := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, rw, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		fmt.Fprint(rw, "HTTP/1.1 200 Connection Established\r\n\r\n")
+		rw.Flush()
+		io.Copy(io.Discard, conn)
+	}))
+	defer gateway.Close()
+	address := strings.TrimPrefix(gateway.URL, "https://")
+	counts := map[string]int{}
+	var mu sync.Mutex
+	api := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Protocol string `json:"protocol"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+			return
+		}
+		mu.Lock()
+		counts[body.Protocol]++
+		mu.Unlock()
+		fmt.Fprintf(w, `{"retcode":0,"smartgate_server":[[%q]],"stinfo":[{"st":%q,"url":"inside.example:53","valid_begin_offset":"0","valid_end_offset":"1800","max_valid":10}]}`, address, body.Protocol+"-grant")
+	}))
+	defer api.Close()
+	c, _ := control.NewClient(api.URL)
+	c.HTTP = api.Client()
+	c.MID = "device"
+	e, _ := New(c, Identity{ID: 1, UserID: "user", DeviceID: c.MID, Ticket: "login"})
+	pin := sha256.Sum256(gateway.Certificate().Raw)
+	e.CertificateSHA256 = hex.EncodeToString(pin[:])
+	area := &policy.Area{ID: "both", SetID: "set", Protocol: "3", Gateways: [][]string{{address}}}
+	for _, network := range []string{"tcp", "udp", "tcp", "udp"} {
+		conn, err := e.dialNetwork(context.Background(), network, area, "inside.example:53")
+		if err != nil {
+			t.Fatal(network, err)
+		}
+		conn.Close()
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if counts["tcp"] != 1 || counts["udp"] != 1 {
+		t.Fatal("protocol grants were reused or not cached", counts)
+	}
+}

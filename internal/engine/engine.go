@@ -60,12 +60,23 @@ func (e *Engine) FetchPolicy(ctx context.Context) (*policy.Policy, error) {
 // Issue creates a new grant. No credentials or tickets are logged or stored by
 // this package; an explicit CLI export can save the returned private session.
 func (e *Engine) Issue(ctx context.Context, address string, area *policy.Area) (*native.Session, error) {
+	return e.IssueNetwork(ctx, "tcp", address, area)
+}
+
+// IssueNetwork keeps the requested grant protocol bound to the transport.
+func (e *Engine) IssueNetwork(ctx context.Context, network, address string, area *policy.Area) (*native.Session, error) {
+	if network != "tcp" && network != "udp" {
+		return nil, errors.New("unsupported resource transport")
+	}
 	address, err := native.CanonicalAddress(address)
 	if err != nil {
 		return nil, err
 	}
 	if area == nil || area.ID == "" || area.SetID == "" {
 		return nil, errors.New("resource has no issued gateway route")
+	}
+	if (network == "udp" && area.Protocol == "2") || (network == "tcp" && area.Protocol == "1") {
+		return nil, errors.New("resource policy does not permit the requested protocol")
 	}
 	if area.ConnectorType != "" && area.ConnectorType != "native" {
 		return nil, errors.New("resource connector transport is not supported")
@@ -78,7 +89,7 @@ func (e *Engine) Issue(ctx context.Context, address string, area *policy.Area) (
 	body := map[string]any{
 		"areaid": area.ID, "set_id": area.SetID, "tenant_id": e.Client.TenantID, "request_id": id,
 		"uid": e.Identity.ID, "user_id": e.Identity.UserID, "device_id": e.Identity.DeviceID, "tgt": e.Identity.Ticket, "tgt_2nd": "",
-		"protocol": "tcp", "req_url": address, "os_type": "linux", "app_id": "0", "app_name": "", "app_version": "",
+		"protocol": network, "req_url": address, "os_type": "linux", "app_id": "0", "app_name": "", "app_version": "",
 		"req_pid": strconv.Itoa(pid), "req_pname": "svpn-cli", "communication_type": 2,
 	}
 	// Start the relative lifetime before the request, conservatively accounting
@@ -148,7 +159,7 @@ func (e *Engine) Issue(ctx context.Context, address string, area *policy.Area) (
 		Ticket: native.TicketJSON{UserName: e.Identity.UserID, DeviceID: e.Identity.DeviceID, ST: grant.ST, AppID: "0", AppName: "smartVPN", AppVersion: "3.0.5.0", ReqUrl: address, ProcName: "svpn-cli", PID: pid,
 			// ServiceId is the matched area ID. Omitting it causes HTTP 403 even
 			// when apply_st successfully issues a valid ST.
-			ServiceId: area.ID, TenantId: e.Client.TenantID, ClientIp: response.ClientIP, Protocol: "tcp"},
+			ServiceId: area.ID, TenantId: e.Client.TenantID, ClientIp: response.ClientIP, Protocol: network},
 	}}}
 	if err := session.Validate(time.Now()); err != nil {
 		return nil, err
@@ -157,6 +168,14 @@ func (e *Engine) Issue(ctx context.Context, address string, area *policy.Area) (
 }
 
 func (e *Engine) DialContext(ctx context.Context, area *policy.Area, address string) (net.Conn, error) {
+	return e.dialNetwork(ctx, "tcp", area, address)
+}
+
+func (e *Engine) DialUDPContext(ctx context.Context, area *policy.Area, address string) (net.Conn, error) {
+	return e.dialNetwork(ctx, "udp", area, address)
+}
+
+func (e *Engine) dialNetwork(ctx context.Context, network string, area *policy.Area, address string) (net.Conn, error) {
 	if area == nil {
 		return nil, errors.New("resource rule required")
 	}
@@ -166,7 +185,7 @@ func (e *Engine) DialContext(ctx context.Context, area *policy.Area, address str
 	if err != nil {
 		return nil, errors.New("invalid resource route")
 	}
-	key := fmt.Sprintf("%x/%s", sha256.Sum256(routeJSON), address)
+	key := fmt.Sprintf("%s/%x/%s", network, sha256.Sum256(routeJSON), address)
 	for {
 		e.mu.Lock()
 		entry := e.cache[key]
@@ -185,7 +204,7 @@ func (e *Engine) DialContext(ctx context.Context, area *policy.Area, address str
 			entry.remaining--
 			d := entry.dialer
 			e.mu.Unlock()
-			return d.DialContext(ctx, "tcp", address)
+			return d.DialContext(ctx, network, address)
 		}
 		if entry != nil && entry.err != nil && entry.expires.After(now) {
 			err := entry.err
@@ -210,7 +229,7 @@ func (e *Engine) DialContext(ctx context.Context, area *policy.Area, address str
 		entry = &cachedGrant{ready: make(chan struct{})}
 		e.cache[key] = entry
 		e.mu.Unlock()
-		session, err := e.Issue(ctx, address, area)
+		session, err := e.IssueNetwork(ctx, network, address, area)
 		var dialer *native.Dialer
 		if err == nil {
 			dialer, err = native.NewDialer(session)

@@ -101,10 +101,13 @@ func verifyPinnedCertificate(state tls.ConnectionState, pin []byte, name string,
 }
 
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if network != "tcp" && network != "tcp4" && network != "tcp6" {
-		return nil, errors.New("only TCP resource transport is implemented")
+	protocol := "tcp"
+	if network == "udp" || network == "udp4" || network == "udp6" {
+		protocol = "udp"
+	} else if network != "tcp" && network != "tcp4" && network != "tcp6" {
+		return nil, errors.New("unsupported gateway transport")
 	}
-	r, err := d.Session.reserve(address)
+	r, err := d.Session.reserveNetwork(protocol, address)
 	if err != nil {
 		return nil, err
 	}
@@ -174,6 +177,9 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	}
 	wrapped := &tunnelConn{Conn: conn, reader: reader}
 	ok = true
+	if protocol == "udp" {
+		return newPacketConn(wrapped, r.Address, d.Session.ExpiresAt)
+	}
 	return wrapped, nil
 }
 
@@ -225,10 +231,10 @@ func buildConnect(r Resource, sourceAddr string, profile headers.Profile) ([]byt
 		fmt.Fprintf(&b, "X-Proxy-Type: %s\r\n", r.ProxyType)
 	}
 	if r.Ticket.Protocol != "" {
-		if r.Ticket.Protocol != "tcp" {
-			return nil, errors.New("only tcp ticket protocol is supported")
+		if r.Ticket.Protocol != "tcp" && r.Ticket.Protocol != "udp" {
+			return nil, errors.New("unsupported ticket protocol")
 		}
-		fmt.Fprint(&b, "Protocol: tcp:\r\n")
+		fmt.Fprintf(&b, "Protocol: %s:\r\n", r.Ticket.Protocol)
 	}
 	b.WriteString("\r\n")
 	if b.Len() > 32768 {

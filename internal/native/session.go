@@ -177,8 +177,8 @@ func (s *Session) Validate(now time.Time) error {
 		if r.Ticket.ST == "" || r.Ticket.UserName == "" || r.Ticket.DeviceID == "" {
 			return fmt.Errorf("resource %d requires issued ST, UserName and DeviceID", i)
 		}
-		if r.Ticket.Protocol != "" && r.Ticket.Protocol != "tcp" {
-			return errors.New("only tcp resource tickets are supported")
+		if r.Ticket.Protocol != "" && r.Ticket.Protocol != "tcp" && r.Ticket.Protocol != "udp" {
+			return errors.New("unsupported resource ticket protocol")
 		}
 		if r.MaxConnections < 1 || r.MaxConnections > 10000 {
 			return errors.New("max_connections must match the issued ticket allowance, from 1 to 10000")
@@ -203,7 +203,9 @@ func (s *Session) Validate(now time.Time) error {
 
 // reserve fails closed for unlisted, expired or exhausted grants. A failed
 // gateway attempt consumes a use too, avoiding accidental ticket overuse.
-func (s *Session) reserve(address string) (Resource, error) {
+func (s *Session) reserve(address string) (Resource, error) { return s.reserveNetwork("tcp", address) }
+
+func (s *Session) reserveNetwork(network, address string) (Resource, error) {
 	a, err := CanonicalAddress(address)
 	if err != nil {
 		return Resource{}, err
@@ -218,6 +220,13 @@ func (s *Session) reserve(address string) (Resource, error) {
 		return Resource{}, errors.New("target is not in the explicit resource list")
 	}
 	r := s.Resources[i]
+	protocol := r.Ticket.Protocol
+	if protocol == "" {
+		protocol = "tcp"
+	}
+	if protocol != network {
+		return Resource{}, errors.New("resource ticket does not authorize the requested protocol")
+	}
 	if s.uses[a] >= r.MaxConnections {
 		return Resource{}, errors.New("resource ticket connection allowance exhausted")
 	}
