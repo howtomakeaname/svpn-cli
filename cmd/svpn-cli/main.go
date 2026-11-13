@@ -53,6 +53,9 @@ func (a *application) run(args []string) error {
 	if len(args) > 0 && args[0] == "auth" {
 		return a.runAuth(args[1:])
 	}
+	if args[0] == "capabilities" {
+		return a.runCapabilities(args[1:])
+	}
 	if args[0] == "tun" {
 		return a.runTUN(args[1:])
 	}
