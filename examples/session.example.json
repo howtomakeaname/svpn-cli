@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "gateway": "https://gateway.example.invalid:9443",
+  "expires_at": "2000-01-01T00:00:00Z",
+  "resources": [
+    {
+      "address": "ssh.internal.example:22",
+      "max_connections": 1,
+      "ticket": {
+        "UserName": "REPLACE_WITH_ISSUED_IDENTITY",
+        "DeviceID": "REPLACE_WITH_REGISTERED_DEVICE_ID",
+        "ST": "REPLACE_WITH_SERVER_ISSUED_RESOURCE_TICKET",
+        "AppID": "0",
+        "AppName": "smartVPN",
+        "AppVersion": "3.0.5.0",
+        "ReqUrl": "ssh.internal.example:22",
+        "ProcName": "",
+        "Source": "",
+        "PID": 0,
+        "ServiceId": "REPLACE_WITH_POLICY_AREA_ID",
+        "TenantId": "",
+        "ClientIp": "",
+        "Protocol": "tcp"
+      }
+    }
+  ]
+}

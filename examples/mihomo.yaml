@@ -1,0 +1,18 @@
+# Merge into an existing mihomo config; this is not a full configuration.
+# Start svpn-cli serve --state ... --mode vpn-only with appropriate gateway trust.
+# SOCKS: https://wiki.metacubex.one/en/config/proxies/socks/
+# Rules: https://wiki.metacubex.one/en/config/rules/
+proxies:
+  - name: SVPN-CLI
+    type: socks5
+    server: 127.0.0.1
+    port: 17891
+    udp: false
+
+# Example authorized SSH target only. Expand using your issued resource policy.
+# Insert above existing catch-all rules. Keep existing unrelated routing rules.
+rules:
+  - AND,((IP-CIDR,192.0.2.10/32),(DST-PORT,22)),SVPN-CLI
+
+# For domain rules, pass original domain names instead of unshared fake-IP values.
+# Do not set svpn-cli's upstream to mihomo; control/gateway sockets stay direct.
