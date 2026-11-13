@@ -1,3 +1,7 @@
+gitee.com/Trisia/gotlcp v1.6.2 h1:tyy4OuyKp4Xk2wb5OXQvJc4g547YTrznUBLEhUNcsg0=
+gitee.com/Trisia/gotlcp v1.6.2/go.mod h1:/qTvEsBa2qAXUCHKXh4r2UThCQLGpgZgc6CdlM5fDEc=
+github.com/emmansun/gmsm v0.45.0 h1:PU/6ObyR3g05YN3jn1L5GZDowzyAi8Xhkq4svzYNyiA=
+github.com/emmansun/gmsm v0.45.0/go.mod h1:HgLSvmdePGLo+Fo2PNgdTQU6lqAepSyriSQJRpECY6w=
 github.com/google/btree v1.1.2 h1:xf4v41cLI2Z6FxbKm+8Bu+m8ifhj15JuZ9sa0jZCMUU=
 github.com/google/btree v1.1.2/go.mod h1:qOPhT0dTNdNzV6Z/lhRX0YXUafgPLFUh+gZMl761Gm4=
 golang.org/x/crypto v0.59.0 h1:xS2jhqYbzNrpvkWP2YTDf4TJwBy3ykR03i8vFDxEc7c=

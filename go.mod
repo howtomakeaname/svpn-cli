@@ -3,6 +3,8 @@ module github.com/howtomakeaname/svpn-cli
 go 1.27.3
 
 require (
+	gitee.com/Trisia/gotlcp v1.6.2
+	github.com/emmansun/gmsm v0.45.0
 	golang.org/x/crypto v0.59.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/term v0.48.0
