@@ -189,7 +189,7 @@ func (s *Server) handleSOCKS(ctx context.Context, client net.Conn) {
 	if _, err := io.ReadFull(client, req[:]); err != nil || req[0] != 5 || req[2] != 0 {
 		return
 	}
-	if req[1] != 1 {
+	if req[1] != 1 && req[1] != 3 {
 		socksReply(client, 7)
 		return
 	}
@@ -226,6 +226,10 @@ func (s *Server) handleSOCKS(ctx context.Context, client net.Conn) {
 		return
 	}
 	port := binary.BigEndian.Uint16(p[:])
+	if req[1] == 3 {
+		s.serveUDPAssociation(ctx, client, host, port)
+		return
+	}
 	if port == 0 {
 		socksReply(client, 1)
 		return

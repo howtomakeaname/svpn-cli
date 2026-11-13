@@ -73,7 +73,7 @@ func TestHTTPConnectPreservesPipelinedData(t *testing.T) {
 	}
 }
 
-func TestSOCKSDomainAndUnsupportedUDP(t *testing.T) {
+func TestSOCKSDomainAndInvalidUDPClientAddress(t *testing.T) {
 	seen := make(chan string, 1)
 	s := New(func(ctx context.Context, n, a string) (net.Conn, error) { seen <- a; return echoDial(ctx, n, a) }, 4)
 	l, _ := startServer(t, s, true)
@@ -99,8 +99,8 @@ func TestSOCKSDomainAndUnsupportedUDP(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmd == 3 {
-				if response[1] != 7 {
-					t.Fatal("UDP command accepted")
+				if response[1] != 8 {
+					t.Fatal("nonliteral UDP client endpoint accepted")
 				}
 				return
 			}
