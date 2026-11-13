@@ -48,6 +48,7 @@ func (a *application) runReverse(args []string) error {
 	if err != nil {
 		return err
 	}
+	config.HostKeyAlgorithms = sshreverse.HostKeyAlgorithms(config.HostKeyCallback, address)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	dial, cleanup, err := options.open(ctx)
@@ -111,7 +112,8 @@ func sshConfig(user, hosts, identity, passphrase, password string) (*ssh.ClientC
 	if err != nil {
 		return nil, &cliError{Code: "INVALID_KNOWN_HOSTS", Message: "Cannot load the trusted OpenSSH known_hosts file.", exit: 4, cause: err}
 	}
-	config := &ssh.ClientConfig{User: user, HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+	algorithms := ssh.SupportedAlgorithms()
+	config := &ssh.ClientConfig{User: user, Config: ssh.Config{KeyExchanges: algorithms.KeyExchanges, Ciphers: algorithms.Ciphers, MACs: algorithms.MACs}, HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		if err := verify(hostname, remote, key); err != nil {
 			return &cliError{Code: "SSH_HOST_KEY_REJECTED", Message: "SSH host key is unknown, changed or revoked; obtain a verified known_hosts entry.", exit: 5, cause: err}
 		}

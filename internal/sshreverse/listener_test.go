@@ -2,7 +2,9 @@ package sshreverse
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"errors"
 	"io"
@@ -33,6 +35,9 @@ func newSSHServer(t *testing.T, deny bool) (string, ssh.PublicKey, func()) {
 		return nil, nil
 	}}
 	config.AddHostKey(signer)
+	ecdsaKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ecdsaSigner, _ := ssh.NewSignerFromKey(ecdsaKey)
+	config.AddHostKey(ecdsaSigner)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +147,7 @@ func newSSHServer(t *testing.T, deny bool) (string, ssh.PublicKey, func()) {
 }
 
 func configFor(key ssh.PublicKey) *ssh.ClientConfig {
-	return &ssh.ClientConfig{User: "test-user", Auth: []ssh.AuthMethod{ssh.Password("test-password")}, HostKeyCallback: ssh.FixedHostKey(key)}
+	return &ssh.ClientConfig{User: "test-user", Auth: []ssh.AuthMethod{ssh.Password("test-password")}, HostKeyCallback: ssh.FixedHostKey(key), HostKeyAlgorithms: []string{key.Type()}}
 }
 
 func TestRemoteForwardCarriesHTTPAndReleasesPort(t *testing.T) {
