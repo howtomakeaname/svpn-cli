@@ -16,9 +16,13 @@ func (a *application) runCapabilities(args []string) error {
 	if f.NArg() != 0 {
 		return usageError("capabilities takes no positional arguments")
 	}
+	udpIngress := []string{"socks5_udp_associate"}
+	if runtime.GOOS == "linux" {
+		udpIngress = append(udpIngress, "linux_tun")
+	}
 	features := map[string]any{
 		"tcp":          map[string]any{"available": true, "ingress": []string{"http", "socks5", "forward", "reverse", "connect"}},
-		"udp":          map[string]any{"available": true, "ingress": []string{"socks5_udp_associate", "linux_tun"}, "vpn_transport": "datagrams_over_tls_tcp", "socks_fragments": false, "raw_udp_vpn": false},
+		"udp":          map[string]any{"available": true, "ingress": udpIngress, "vpn_transport": "datagrams_over_tls_tcp", "socks_fragments": false, "raw_udp_vpn": false},
 		"tun":          map[string]any{"available": runtime.GOOS == "linux", "platforms": []string{"linux"}, "routing_modes": []string{"vpn-only"}, "route_configuration": "external", "requires": "permitted TUN device or inherited descriptor", "dns_hijack": false, "icmp": false},
 		"gateway_tls":  map[string]any{"available": true, "default": true, "minimum_version": "1.2"},
 		"gateway_tlcp": map[string]any{"available": true, "version": "1.1", "opt_in": true, "trust": "explicit_ca_for_both_server_certificates", "client_certificates": false},
