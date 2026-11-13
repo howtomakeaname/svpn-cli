@@ -1,0 +1,7 @@
+svpn-cli is an unofficial interoperability tool. It is not affiliated with,
+endorsed by, or supported by Tencent or any institution named in its documentation.
+Product and organization names remain the property of their respective owners.
+
+The MIT license applies to the original source code and documentation in this
+repository. Dependencies retain their own licenses; see THIRD_PARTY_NOTICES.
+No vendor client packages or third-party credentials are distributed here.

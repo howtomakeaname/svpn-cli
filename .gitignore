@@ -1,0 +1,17 @@
+/downloads/
+/vendor-extracted/
+/bin/
+/research/deb-control/
+/research/evidence/
+/research/*.html
+/research/*.part
+/private/
+/.cache/
+__pycache__/
+/dist/
+/native-build/
+/research/
+/tools/
+/.env
+/.env.*
+/coverage.out
