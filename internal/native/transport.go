@@ -20,12 +20,15 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"gitee.com/Trisia/gotlcp/tlcp"
 )
 
 type Dialer struct {
-	Session   *Session
-	tlsConfig *tls.Config
-	Timeout   time.Duration
+	Session    *Session
+	tlsConfig  *tls.Config
+	tlcpConfig *tlcp.Config
+	Timeout    time.Duration
 }
 
 // GatewayError retains a bounded response for explicit private diagnostics.
@@ -46,6 +49,13 @@ func NewDialer(s *Session) (*Dialer, error) {
 	}
 	if err := s.HeaderProfile.Validate(); err != nil {
 		return nil, err
+	}
+	if s.TLSMode == "tlcp" {
+		config, err := newTLCPConfig(s)
+		if err != nil {
+			return nil, err
+		}
+		return &Dialer{Session: s, Timeout: 15 * time.Second, tlcpConfig: config}, nil
 	}
 	roots, err := x509.SystemCertPool()
 	if err != nil {
@@ -113,9 +123,15 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.
 	}
 	ctx, cancel := context.WithTimeout(ctx, d.Timeout)
 	defer cancel()
-	conn, err := (&tls.Dialer{NetDialer: &net.Dialer{Timeout: d.Timeout, KeepAlive: 30 * time.Second}, Config: d.tlsConfig}).DialContext(ctx, "tcp", d.Session.gatewayURL.Host)
+	var conn net.Conn
+	netDialer := &net.Dialer{Timeout: d.Timeout, KeepAlive: 30 * time.Second}
+	if d.tlcpConfig != nil {
+		conn, err = (&tlcp.Dialer{NetDialer: netDialer, Config: d.tlcpConfig}).DialContext(ctx, "tcp", d.Session.gatewayURL.Host)
+	} else {
+		conn, err = (&tls.Dialer{NetDialer: netDialer, Config: d.tlsConfig}).DialContext(ctx, "tcp", d.Session.gatewayURL.Host)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("gateway TLS connection: %w", err)
+		return nil, fmt.Errorf("gateway secure connection: %w", err)
 	}
 	ok := false
 	defer func() {

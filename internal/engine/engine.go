@@ -27,6 +27,7 @@ type Engine struct {
 	Client                    *control.Client
 	Identity                  Identity
 	CertificateSHA256, CAFile string
+	GatewayTLS                string
 	mu                        sync.Mutex
 	cache                     map[string]*cachedGrant
 }
@@ -152,7 +153,7 @@ func (e *Engine) IssueNetwork(ctx context.Context, network, address string, area
 	if allowance > 10000 {
 		allowance = 10000
 	}
-	session := &native.Session{Version: 1, Gateway: "https://" + gateway, HeaderProfile: e.Client.Profile, CertificateSHA256: e.CertificateSHA256, CAFile: e.CAFile, ExpiresAt: issued.Add(time.Duration(end)*time.Second - 5*time.Second), Resources: []native.Resource{{
+	session := &native.Session{Version: 1, Gateway: "https://" + gateway, TLSMode: e.GatewayTLS, HeaderProfile: e.Client.Profile, CertificateSHA256: e.CertificateSHA256, CAFile: e.CAFile, ExpiresAt: issued.Add(time.Duration(end)*time.Second - 5*time.Second), Resources: []native.Resource{{
 		Address: address, Machine: e.Client.Machine, MaxConnections: allowance,
 		// These App fields are gateway compatibility metadata, not
 		// process identity. The actual requesting process above is this CLI.

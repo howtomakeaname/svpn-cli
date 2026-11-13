@@ -12,8 +12,8 @@ import (
 // All streaming commands share policy, ticket, header and trust behavior.
 // This prevents forwarding commands from accidentally bypassing VPN policy.
 type connectionOptions struct {
-	state, session, mode, pin, ca string
-	headers                       headerFlags
+	state, session, mode, pin, ca, tlsMode string
+	headers                                headerFlags
 }
 
 func (o *connectionOptions) bind(f *flag.FlagSet) {
@@ -23,16 +23,23 @@ func (o *connectionOptions) bind(f *flag.FlagSet) {
 	f.StringVar(&o.mode, "mode", "vpn-only", "routing with --state: vpn-only or auto")
 	f.StringVar(&o.pin, "certificate-sha256", "", "explicit gateway leaf certificate trust anchor; verify independently")
 	f.StringVar(&o.ca, "gateway-ca", "", "additional gateway CA PEM file")
+	f.StringVar(&o.tlsMode, "gateway-tls", "", "gateway TLS protocol: tls (default) or tlcp; TLCP requires --gateway-ca and no single-leaf pin")
 }
 
 func (o connectionOptions) validate() error {
 	if (o.session == "") == (o.state == "") {
 		return usageError("provide exactly one of --state or --session")
 	}
+	if o.tlsMode != "" && o.tlsMode != "tls" && o.tlsMode != "tlcp" {
+		return usageError("--gateway-tls must be tls or tlcp")
+	}
+	if o.tlsMode == "tlcp" && (o.ca == "" || o.pin != "") {
+		return usageError("--gateway-tls tlcp requires --gateway-ca and does not accept a single-leaf certificate pin")
+	}
 	if o.mode != "vpn-only" && o.mode != "auto" {
 		return usageError("--mode must be vpn-only or auto")
 	}
-	if o.session != "" && (o.mode != "vpn-only" || o.pin != "" || o.ca != "") {
+	if o.session != "" && (o.mode != "vpn-only" || o.pin != "" || o.ca != "" || o.tlsMode != "") {
 		return usageError("mode and gateway trust flags require --state; session files contain their own trust settings")
 	}
 	return nil
@@ -45,6 +52,7 @@ func (o connectionOptions) open(ctx context.Context) (proxy.DialFunc, func(), er
 		if err != nil {
 			return nil, noop, err
 		}
+		e.GatewayTLS = o.tlsMode
 		cleanup := e.Client.HTTP.CloseIdleConnections
 		e.Client.Profile, err = o.headers.apply(e.Client.Profile)
 		if err != nil {

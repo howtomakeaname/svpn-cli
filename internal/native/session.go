@@ -52,6 +52,7 @@ type Resource struct {
 type Session struct {
 	Version           int             `json:"version"`
 	Gateway           string          `json:"gateway"`
+	TLSMode           string          `json:"gateway_tls,omitempty"`
 	ServerName        string          `json:"server_name,omitempty"`
 	CAFile            string          `json:"ca_file,omitempty"`
 	CertificateSHA256 string          `json:"certificate_sha256,omitempty"`
@@ -132,6 +133,12 @@ func LoadSession(path string) (*Session, error) {
 func (s *Session) Validate(now time.Time) error {
 	if err := s.HeaderProfile.Validate(); err != nil {
 		return err
+	}
+	if s.TLSMode != "" && s.TLSMode != "tls" && s.TLSMode != "tlcp" {
+		return errors.New("gateway_tls must be tls or tlcp")
+	}
+	if s.TLSMode == "tlcp" && (s.CAFile == "" || s.CertificateSHA256 != "") {
+		return errors.New("TLCP requires gateway CA trust; a single-leaf pin cannot authenticate both server certificates")
 	}
 	if s.Version != 1 {
 		return errors.New("unsupported session version")
