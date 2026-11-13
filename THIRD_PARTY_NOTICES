@@ -1,5 +1,6 @@
 The release binaries include the Go runtime and standard library,
-golang.org/x/sys v0.50.0 and golang.org/x/term v0.48.0.
+golang.org/x/sys v0.50.0, golang.org/x/term v0.48.0 and
+golang.org/x/crypto v0.59.0.
 These components are distributed under the following BSD 3-Clause license.
 
 Copyright 2009 The Go Authors.
