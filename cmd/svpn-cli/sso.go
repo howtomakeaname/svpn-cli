@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"github.com/howtomakeaname/svpn-cli/internal/control"
 	"github.com/howtomakeaname/svpn-cli/internal/privatefs"
@@ -40,11 +39,11 @@ func deviceClient(s *authState) (*control.Client, error) {
 	return c, nil
 }
 
-func runSSO(args []string) error {
-	f := flag.NewFlagSet("auth sso", flag.ContinueOnError)
+func (a *application) runSSO(args []string) error {
+	f := a.newFlagSet("auth sso")
 	path := f.String("state", "private/auth.json", "private device state")
 	domain := f.String("domain", "", "authentication domain ID")
-	if err := f.Parse(args); err != nil {
+	if err := a.parseFlags(f, args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {
@@ -165,11 +164,11 @@ func parseSSOCallback(raw string, pending *pendingSSO, now time.Time) (string, e
 	return values[0], nil
 }
 
-func runSSOFinish(args []string) error {
-	f := flag.NewFlagSet("auth finish", flag.ContinueOnError)
+func (a *application) runSSOFinish(args []string) error {
+	f := a.newFlagSet("auth finish")
 	path := f.String("state", "private/auth.json", "private device state")
 	callbackFile := f.String("callback-file", "", "0600 file containing full callback URL (otherwise hidden terminal prompt)")
-	if err := f.Parse(args); err != nil {
+	if err := a.parseFlags(f, args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {

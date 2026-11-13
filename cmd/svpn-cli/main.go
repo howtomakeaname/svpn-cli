@@ -18,19 +18,19 @@ import (
 	"github.com/howtomakeaname/svpn-cli/internal/routing"
 )
 
-func run(args []string) error {
+func (a *application) run(args []string) error {
 	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
 		fmt.Println(versionString())
 		return nil
 	}
 	if len(args) > 0 && args[0] == "policy" {
-		return runPolicy(args[1:])
+		return a.runPolicy(args[1:])
 	}
 	if len(args) > 0 && args[0] == "ticket" {
-		return runTicket(args[1:])
+		return a.runTicket(args[1:])
 	}
 	if len(args) > 0 && args[0] == "auth" {
-		return runAuth(args[1:])
+		return a.runAuth(args[1:])
 	}
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
 		fmt.Println("svpn-cli: independent experimental iOA TCP client\n\nCommands: auth init|sso|finish|exchange|status, policy, ticket, check, connect, serve\nUse 'svpn-cli COMMAND --help' for options.\n\nconnect/serve --state FILE: fetch policy and obtain resource tickets automatically.\nserve --mode vpn-only: VPN resources only, for mihomo/upstream routing.\nserve --mode auto: policy-selected VPN resources; unmatched destinations direct.\nBoth modes fail closed on protected ports, policy errors and VPN rejection.\nAn explicit --session FILE remains available for transport diagnostics.")
@@ -43,7 +43,7 @@ func run(args []string) error {
 	if command != "check" && command != "connect" && command != "serve" {
 		return errors.New("unknown command: use auth, check, connect or serve")
 	}
-	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	flags := a.newFlagSet(command)
 	headerOptions := addHeaderFlags(flags)
 	sessionPath := flags.String("session", "", "private JSON file with already-issued resource tickets")
 	statePath := flags.String("state", "", "private device login state; enables automatic policy and resource ticket acquisition")
@@ -54,7 +54,7 @@ func run(args []string) error {
 	httpAddr := flags.String("http", "127.0.0.1:17890", "HTTP listener; empty disables it")
 	socksAddr := flags.String("socks", "127.0.0.1:17891", "SOCKS5 listener; empty disables it")
 	limit := flags.Int("max-connections", 128, "maximum concurrent proxy requests")
-	if err := flags.Parse(args[1:]); err != nil {
+	if err := a.parseFlags(flags, args[1:]); err != nil {
 		return err
 	}
 	if (*sessionPath == "") == (*statePath == "") {
@@ -205,7 +205,7 @@ func loginEngine(path, pin, caFile string) (*engine.Engine, error) {
 }
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := (&application{}).run(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}

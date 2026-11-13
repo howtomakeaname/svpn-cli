@@ -4,18 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"strconv"
 	"time"
 )
 
-func runPolicy(args []string) error {
-	f := flag.NewFlagSet("policy", flag.ContinueOnError)
+func (a *application) runPolicy(args []string) error {
+	f := a.newFlagSet("policy")
 	path := f.String("state", "private/auth.json", "private device state")
 	output := f.String("output", "private/policy.json", "private policy response")
 	hostPolicy := f.Bool("host", false, "read device policy instead of resource policy")
-	if err := f.Parse(args); err != nil {
+	if err := a.parseFlags(f, args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {

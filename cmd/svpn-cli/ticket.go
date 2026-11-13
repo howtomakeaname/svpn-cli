@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"github.com/howtomakeaname/svpn-cli/internal/control"
 	"github.com/howtomakeaname/svpn-cli/internal/native"
@@ -38,14 +37,14 @@ func writePrivateJSON(path string, value any) error {
 	return os.Rename(f.Name(), path)
 }
 
-func runTicket(args []string) error {
-	f := flag.NewFlagSet("ticket", flag.ContinueOnError)
+func (a *application) runTicket(args []string) error {
+	f := a.newFlagSet("ticket")
 	path := f.String("state", "private/auth.json", "private device state")
 	target := f.String("target", "", "explicit authorized TCP resource host:port")
 	area := f.String("area", "", "area ID from the caller's issued policy")
 	setID := f.String("set-id", "", "gateway set ID from issued policy")
 	output := f.String("output", "private/ticket-response.json", "private raw response path")
-	if err := f.Parse(args); err != nil {
+	if err := a.parseFlags(f, args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {

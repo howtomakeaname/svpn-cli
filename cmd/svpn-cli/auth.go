@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"github.com/howtomakeaname/svpn-cli/internal/control"
 	"github.com/howtomakeaname/svpn-cli/internal/headers"
@@ -84,29 +83,29 @@ func readAuth(path string) (authState, error) {
 	return s, nil
 }
 
-func runAuth(args []string) error {
+func (a *application) runAuth(args []string) error {
 	if len(args) > 0 && args[0] == "sso" {
-		return runSSO(args[1:])
+		return a.runSSO(args[1:])
 	}
 	if len(args) > 0 && args[0] == "finish" {
-		return runSSOFinish(args[1:])
+		return a.runSSOFinish(args[1:])
 	}
 	if len(args) > 0 && args[0] == "exchange" {
-		return runExchange(args[1:])
+		return a.runExchange(args[1:])
 	}
 	if len(args) > 0 && args[0] == "status" {
-		return runAuthStatus(args[1:])
+		return a.runAuthStatus(args[1:])
 	}
 	if len(args) == 0 || args[0] != "init" {
 		return errors.New("usage: svpn-cli auth init --state private/auth.json --pin ORGANIZATION_PIN")
 	}
-	f := flag.NewFlagSet("auth init", flag.ContinueOnError)
+	f := a.newFlagSet("auth init")
 	headerOptions := addHeaderFlags(f)
 	path := f.String("state", "private/auth.json", "private device state path")
 	pin := f.String("pin", "", "organization PIN (required for first initialization)")
 	machine := f.String("machine", "", "device display name (saved in device state)")
 	origin := f.String("origin", "https://scs.gateway.tencent.com", "HTTPS control origin")
-	if err := f.Parse(args[1:]); err != nil {
+	if err := a.parseFlags(f, args[1:]); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {

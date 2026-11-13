@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"time"
 )
 
-func runAuthStatus(args []string) error {
-	f := flag.NewFlagSet("auth status", flag.ContinueOnError)
+func (a *application) runAuthStatus(args []string) error {
+	f := a.newFlagSet("auth status")
 	path := f.String("state", "private/auth.json", "private device state")
-	if err := f.Parse(args); err != nil {
+	if err := a.parseFlags(f, args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {
