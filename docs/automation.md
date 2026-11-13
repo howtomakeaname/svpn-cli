@@ -1,6 +1,6 @@
 # Agent 与自动化接口
 
-CLI 可直接作为进程工具调用。对有限命令使用 argv 数组、捕获 stdout/stderr，并设置调用方超时；长期代理进程应单独由调用方管理。无需安装官方客户端或额外的 MCP 服务。
+Agent 可以直接启动 CLI 进程并读取结果。对执行后会退出的一次性命令，使用 argv 数组传参，捕获 stdout/stderr，并设置调用方超时；长期运行的代理进程则由调用方单独管理。无需安装官方客户端或额外的 MCP 服务。
 
 ## 发现命令
 
@@ -20,13 +20,13 @@ svpn-cli --json help reverse
 
 ## 结果与错误
 
-有限命令成功时，stdout 恰好包含一行 JSON，退出码为 0：
+一次性命令成功时，stdout 恰好包含一行 JSON，退出码为 0：
 
 ```json
 {"schema_version":1,"command":"auth inspect","ok":true,"data":{"state_file":"private/auth.json","state_exists":false,"stage":"uninitialized","registered":false,"server_validated":false,"credential_validity":"unknown","next_action":{"kind":"run_command","argv":["svpn-cli","--json","auth","init","--state","private/auth.json"],"message":"Supply --pin YOUR_ORGANIZATION_PIN for organization discovery."}}}
 ```
 
-失败时有限命令的 stdout 为空，stderr 包含一行 JSON，退出码非零：
+一次性命令失败时，stdout 为空，stderr 包含一行 JSON，退出码非零：
 
 ```json
 {"schema_version":1,"command":"auth finish","ok":false,"error":{"code":"INTERACTION_REQUIRED","message":"Supply the HTTPS SSO callback using --callback-file or --callback-stdin; interactive input is disabled.","retryable":false,"next_action":{"kind":"supply_callback"}}}
@@ -132,7 +132,7 @@ svpn-cli --json reverse --state private/auth.json \
 
 实现使用 Go SSH 的 [已有连接握手](https://pkg.go.dev/golang.org/x/crypto/ssh#NewClientConn)、[远程监听](https://pkg.go.dev/golang.org/x/crypto/ssh#Client.Listen) 和 [OpenSSH known_hosts 校验](https://pkg.go.dev/golang.org/x/crypto/ssh/knownhosts#New)。
 
-## 有限命令调用示例（Python）
+## 一次性命令调用示例（Python）
 
 ```python
 import json
