@@ -1,43 +1,63 @@
-# Architecture figure prompt
+# Architecture figure prompts
 
-Generated with the built-in imagegen tool. `architecture.png` is the selected output, reviewed against the CLI routing and transport behavior. Panel (a) shows logical control interactions; panel (b) shows request routing, with responses implicit over established connections.
+Generated and edited with the built-in imagegen tool. `architecture.png` is the selected result. The client boundary spans the control and data planes; dashed arrows show policy and ticket dependencies. Browser interactions are logical login handoffs, and data-plane arrows show request routing, with responses implicit over established connections.
+
+## Generation
 
 Use case: scientific-educational
-Asset type: a camera-ready computer networking paper architecture figure, embedded in a GitHub README.
-Primary request: completely redraw the svpn-cli architecture as a rigorous, minimalist scholarly figure with two panels. This must look like an actual systems paper figure, NOT a marketing infographic, presentation slide, or UI flowchart.
+Asset type: a networking software architecture figure for the svpn-cli README.
+Primary request: draw a refined, colorful but restrained academic systems figure, with a clear THREE-COLUMN by TWO-ROW architecture. The client boundary spans both rows, so the reader sees how authorization supports traffic forwarding. This is a new composition, not a recolor of a generic two-panel flowchart.
 
-VISUAL SPECIFICATION:
-White canvas and white interiors of every box. Absolutely no colored fills, gradients, textures, shadows, gloss, giant headings, cards, heavy rounded corners, clip art or icons. Thin uniform strokes, squared rectangles, regular-weight Helvetica/Arial-style type, precise alignment, generous white gutters. Only the small panel letters (a) and (b) may be bold. All other text, including headings and node labels, uses normal weight. Small component titles rather than decorative titles. Use black/charcoal for all text and ordinary arrows, muted dark teal only for the VPN data path. Do not add a large legend. Wide landscape composition, approximately 2400 x 1500, readable at 960 px display width. Use large enough body text for real documentation, not tiny annotations.
+VISUAL STYLE:
+White background; balanced flat pastel fills; thin colored outlines; dark slate typography. Clean regular-weight sans-serif with only small semibold component titles. Consistent text padding and generous gutters. No textures, gradients, shadows, 3D, pictograms, watermarks or oversized headings. Rounded corners are subtle, about 5 px. Looks like a carefully designed camera-ready research figure, not a slide deck. Landscape around 2400 x 1440. Body labels must remain legible at 960 px display width.
+Palette: muted blue #4778AD with #EAF2FB for client modules, violet #7664A6 with #F0EBF8 for authorization, teal #278C82 with #E5F3EE for VPN path and protected resources, ochre #AA8746 with #FAF1DF for direct traffic, terracotta #B86561 with #FAE8E5 for rejection. Text #23344A. Use color meaningfully and consistently. Fill the CLI boundary with only a nearly-white cool tint, not a saturated large panel.
 
-STRUCTURE:
-Two separate horizontal panels stacked vertically, with NO connecting lines between the panels. Each panel is a distinct view. A small label at the upper left of each panel:
-"(a) Control plane"
-"(b) Data plane"
-Panel (a) occupies about 25% of figure height; panel (b) about 60%; two concise notes below. Neither panel gets a filled background or a large outside frame.
+GRID AND BOUNDARIES:
+Three modest column headings across the top, exact text:
+"Users & applications" (left, approximately 15% width)
+"svpn-cli" (center, approximately 55% width)
+"Remote services" (right, approximately 30% width).
+ONE thin blue-gray boundary encloses all CLI modules in the center column, spanning upper control row and lower data row. Browser and applications are OUTSIDE it on the left; Access API, VPN gateway, Authorized service and Direct destination are OUTSIDE it on the right. Do not put every column in a large colored panel.
+Inside the central client region, two small left-aligned row labels: "Control plane" above the upper row, and "Data plane" above the lower row. A very fine horizontal divider may separate the rows, but it must NOT obstruct vertical dependency arrows.
 
-PANEL (a): Three aligned boxes, left to right, with generous spacing.
-Left box: "Browser" and beneath it "SSO / MFA".
-Middle box: "CLI session" and beneath it "Device-bound state".
-Right box: "Access API" and beneath it "Policy + resource tickets".
-Between Browser and CLI session draw a thin horizontal DOUBLE-HEADED arrow labelled "Login URL / callback".
-Between CLI session and Access API draw a thin horizontal DOUBLE-HEADED arrow labelled "HTTPS".
-These are logical interactions, not a sequence diagram. Do not draw Browser -> Access API or any connection to panel (b).
+UPPER CONTROL ROW:
+Left, outside CLI: a small neutral pale box "Browser" / "SSO / MFA".
+Center, inside CLI: one wider pale-violet box "Control client" / "Device session · policy · grants". It spans the horizontal positions of the router and VPN connector underneath.
+Right, outside CLI: one pale-violet box "Access API".
+Browser <-> Control client is a violet DOUBLE-HEADED horizontal arrow labelled "Login URL / callback".
+Control client <-> Access API is a violet DOUBLE-HEADED horizontal arrow labelled "HTTPS".
+From separate lower ports of Control client, draw two thin violet DASHED vertical arrows, with no crossing:
+- straight down to Policy router below, labelled "Policy";
+- straight down to VPN connector below, labelled "On-demand ticket".
+These are logical control dependencies, NOT application data. The policy arrow must end ONLY at Policy router; the ticket arrow must end ONLY at VPN connector. Do not connect them to each other.
 
-PANEL (b): Single data path with three explicit routing outcomes.
-A thin gray dashed rectangular boundary labelled "svpn-cli" contains the ingress, policy router and VPN connector ONLY. The remote gateway and remote targets are OUTSIDE this boundary on the right. The label is small and modest at the top edge, not an oversized title.
-Inside the left of this boundary, ONE tall box with heading "Local ingress", then three separate regular-weight lines:
-"HTTP / CONNECT (TCP)"
-"SOCKS5 (TCP / UDP)"
-"Linux TUN* (TCP / UDP)"
-One thin rightward arrow from this ingress box to ONE central box "Policy router", with small second line "Host / port / protocol".
-Three separate outgoing branches from Policy router, no crossing connectors:
-1. Upper branch labelled "Allowed resource" leads to an inside-boundary box "VPN connector", with second line "Resource ticket". A rightward muted teal arrow from VPN connector crosses the boundary to an external box "VPN gateway", then another rightward muted teal arrow to a separate external box "Authorized service". Above the connector-to-gateway link place "TLS + CONNECT". Both gateway and service are clearly outside CLI. Gateway is NOT the service.
-2. Middle/lower branch labelled "Unmatched in auto" goes straight to a separate external box "Other destination". This is the direct path, bypassing gateway completely. Label the outgoing line "Direct". There is NO separate Direct dial box: keep the architecture lean.
-3. A short downward branch ends in the word "Reject", inside the CLI boundary. Beside this branch place two short lines "Denied / error" and "Unmatched in vpn-only". Reject has NO outgoing arrows.
-Do not draw any link from VPN connector to the direct path. Protected failures NEVER fall back to direct. The paths are directional request-routing arrows; responses are implicit over the established connections.
+LOWER DATA ROW:
+Outside CLI on the left: a pale neutral-blue box "Applications", with two smaller lines "curl · SSH · agents" and "mihomo / Clash".
+A rightward blue arrow enters the CLI boundary and reaches a pale-blue box "Local ingress", containing exactly these three lines:
+"HTTP / CONNECT"
+"SOCKS5 TCP / UDP"
+"Linux TUN*"
+A rightward blue arrow then reaches the central pale-blue "Policy router" box. Its smaller subtitle is "Host · port · protocol". Make this box wide enough to fit the subtitle with real padding.
+The router has THREE DISTINCT, NONCROSSING routing outcomes:
+1. Straight right, a teal arrow labelled "Allowed" to an inside-CLI pale-blue "VPN connector" box. This receives the dashed on-demand-ticket arrow from above. Then a teal arrow crosses the CLI boundary, labelled "TLS + CONNECT", to an OUTSIDE pale-mint "VPN gateway" box. Another teal arrow reaches a separate OUTSIDE pale-mint "Authorized service" box further right. Gateway and service are separate, aligned, externally placed boxes. No node is omitted.
+2. From the lower-right side of Policy router, an ochre branch drops to a separate lower horizontal lane, labelled "Unmatched in auto". It bypasses VPN connector and gateway and ends at an OUTSIDE pale-sand box "Direct destination", positioned below the gateway/service lane. Label the outgoing segment "Direct". This path never touches the gateway.
+3. From a DIFFERENT lower port of Policy router, a short terracotta arrow goes down to a small pale-blush "Reject" box INSIDE CLI. Its adjacent label is two lines: "Denied / error" and "Unmatched in vpn-only". Place this rejection lane below and apart from the direct lane so labels do not collide. Reject has no outgoing arrow.
+There is NO fallback arrow from VPN connector or gateway to Direct destination. No crossing data paths. Responses are implicit over established connections.
 
-FOOTNOTES, exact regular-weight text, left-aligned and legible:
-"* Linux TUN supports vpn-only; routes and DNS are configured externally."
+BOTTOM NOTES, modest but legible:
+"Dashed: authorization dependencies. Solid: request routing."
+"* Linux TUN: TCP/UDP, vpn-only; routes and DNS configured externally."
 "UDP is framed over TLS/TCP. TLCP 1.1 is an optional gateway mode."
 
-NO additional labels or content. No vendor, organization, university or real endpoint names. No SPA, QUIC, WireGuard or unsupported protocol claims. Do not draw each CLI command as its own box; a figure explains component boundaries, not the command reference. Avoid duplicate full pipelines for routing modes. Layout quality, scientific restraint and semantic correctness matter most.
+COMPOSITION QUALITY:
+Every component has clear padding. Match columns and align upper Control client over the exact two lower modules receiving its policy and ticket arrows. All remote nodes stay visibly beyond the CLI right boundary. Keep all routing labels away from box borders and arrowheads. No giant badges, no boxed legend, no extra text, no branding or real organization endpoints. Avoid duplicate complete pipelines. The reader should immediately recognize user inputs, the client boundary, authorization dependencies and the three possible traffic outcomes.
+
+## Legend correction
+
+Use case: precise-object-edit
+Input image: edit target, an existing svpn-cli architecture figure.
+Change ONLY the FIRST footnote line at the bottom:
+Replace "Dashed: authorization dependencies. Solid: request routing."
+with exactly "Dashed arrows denote policy and ticket dependencies."
+The solid arrows in the upper control row are logical control interactions, so the original blanket "Solid: request routing" description was ambiguous. This is only a footer text correction.
+Preserve every other word, node, box, arrow, arrowhead, color, line path, font size, panel boundary, alignment, remaining footnotes and canvas dimensions exactly. Keep the replacement left-aligned at the original first footnote position, in the same font and size. Do not redraw, omit, move or recolor any other element. No extra text.
