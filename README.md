@@ -4,9 +4,11 @@
 [![Release](https://img.shields.io/github/v/release/howtomakeaname/svpn-cli?include_prereleases)](https://github.com/howtomakeaname/svpn-cli/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个面向 iOA / SVPN 的轻量跨平台 CLI 适配客户端：通过浏览器完成 SSO/MFA，按资源获取访问票据，为 SSH、HTTP 和 HTTPS 应用提供本地 HTTP/SOCKS5 TCP 代理，支持按组织策略分流及 mihomo / Clash 集成。
+一个面向 iOA / SVPN 的轻量跨平台 CLI 适配客户端：通过浏览器完成 SSO/MFA，按资源获取访问票据，提供 HTTP/SOCKS5 代理、SOCKS5 UDP、Linux TUN 和双向 TCP 端口转发，支持按组织策略分流及 mihomo / Clash 集成。
 
 ![svpn-cli 的控制面与两种代理模式](docs/assets/architecture.png)
+
+图示为核心代理路径；UDP、TUN 与 TLCP 的范围和验证状态见 [传输能力](docs/transports.md)。
 
 **当前为实验版本。** Linux 已完成真实登录及 SSH 联调；Windows/macOS 提供原生 CI 测试和发布包，真实部署兼容性仍需使用者验证。项目为第三方互操作工具，与相关厂商或组织无隶属关系。
 
@@ -33,6 +35,7 @@ svpn-cli --help
 
 ```bash
 svpn-cli --json help
+svpn-cli --json capabilities
 svpn-cli --json help auth finish
 svpn-cli --json auth inspect --state private/auth.json
 svpn-cli --json serve --state private/auth.json --mode auto --http 127.0.0.1:0 --socks ''
@@ -80,7 +83,7 @@ svpn-cli serve --state private/auth.json --mode auto
 | 请求 | vpn-only | auto |
 | --- | --- | --- |
 | 命中资源且端口允许 | 经 VPN 网关连接 | 经 VPN 网关连接 |
-| 地址受保护但端口不允许 | 拒绝 | 拒绝 |
+| 地址受保护但端口或协议不允许 | 拒绝 | 拒绝 |
 | 未命中资源 | 拒绝 | 直连 |
 | 策略不可用、授权失败或隧道被拒绝 | 拒绝 | 拒绝 |
 
@@ -124,6 +127,18 @@ SSH 服务端须允许远程 TCP 转发。CLI 使用原生 Go SSH，无需外部
 
 普通 HTTP 代理当前不复用上游连接；频繁小请求若需要连接复用，可使用 SOCKS5、HTTPS CONNECT 或固定端口转发。实测方式、数据及限制见 [性能记录](docs/performance.md)。
 
+## UDP 与 Linux TUN
+
+SOCKS5 支持 `UDP ASSOCIATE`，每个数据流按 UDP 资源策略独立取票；TCP 授权不能用于 UDP。VPN 数据报经 TLS/TCP 封装，保留报文边界，外层仍受 TCP 队头阻塞影响。关联随控制 TCP 连接关闭，固定客户端源端点；不支持 SOCKS 分片。关联及数据流计入并发限制，UDP 使用时 `--max-connections` 至少为 2。
+
+Linux 提供实验性 TUN 入口。管理员先准备允许当前用户访问的 TUN 设备及目标 IP 路由，再运行：
+
+```bash
+svpn-cli --json tun --state private/auth.json --device svpn0 --mode vpn-only
+```
+
+也可通过 `--fd NUMBER` 接收已打开的 TUN 描述符，使应用位于隔离网络命名空间、CLI 位于宿主网络。路由、接口地址及 DNS 由外部配置；当前仅支持 `vpn-only`，没有 DNS 劫持、fake-IP 映射或 ICMP 代理。网关和控制面出口须避开 TUN 路由。macOS/Windows 的 TUN 设备入口尚未实现。
+
 ## TLS 与请求头
 
 默认验证系统 CA、证书主机名和有效期，最低 TLS 1.2。私有部署可显式使用以下之一：
@@ -135,6 +150,14 @@ svpn-cli serve --state private/auth.json --certificate-sha256 YOUR_VERIFIED_LEAF
 
 CA/指纹应通过可信渠道获取。固定叶证书仍检查主机名及有效期，没有自动接受证书或跳过验证的选项。上述信任参数也适用于 `connect`、`forward` 和 `reverse`。
 
+网关也可显式使用 **TLCP 1.1**，需提供能验证签名证书和加密证书的 CA：
+
+```bash
+svpn-cli --json serve --state private/auth.json --gateway-tls tlcp --gateway-ca /absolute/path/to/ca.pem
+```
+
+TLCP 不接受单张叶证书指纹，握手失败不会重试普通 TLS；当前不提供 TLCP 客户端证书认证。它与 RFC 8998 的国密 TLS 1.3 是不同协议，后者尚未实现。控制面 SSO/API 仍使用普通 HTTPS。独立 GmSSL 互操作结果及部署边界见 [传输能力](docs/transports.md)。
+
 默认使用兼容 UA 与网关产品头，不附加实现产品标记。可自定义 User-Agent 或补充控制面/网关头：
 
 ```bash
@@ -143,11 +166,11 @@ svpn-cli serve --state private/auth.json --mode auto --header-profile my-headers
 svpn-cli serve --state private/auth.json --user-agent 'YOUR_USER_AGENT'
 ```
 
-`auth init` 将配置保存到私密状态并复用已有 MID；`serve/connect/forward/reverse` 的覆盖只作用于本次运行。配置含 `user_agent`、`control_headers`、`gateway_headers`。Host、认证、签名、身份、协议和消息长度字段不能被附加头覆盖；拒绝控制字符、重复名字和过大请求头。进程审计字段仍报告实际进程。
+`auth init` 将配置保存到私密状态并复用已有 MID；`serve/connect/forward/reverse/tun` 的覆盖只作用于本次运行。配置含 `user_agent`、`control_headers`、`gateway_headers`。Host、认证、签名、身份、协议和消息长度字段不能被附加头覆盖；拒绝控制字符、重复名字和过大请求头。进程审计字段仍报告实际进程。
 
 ## 边界
 
-- TCP 支持 HTTP、HTTPS 和 SSH；尚无 UDP、TUN、SPA 或国密 TLS。
+- SPA 单包授权、RFC 8998 国密 TLS 1.3、原生 UDP/QUIC/WireGuard 数据面尚未实现；需要这些功能的部署仍不兼容。已支持的 UDP 使用 TLS/TCP 封装。
 - 活动连接受所用 ST 到期时间约束；长连接可能届时断开。TGT 自动续期、额外交互挑战和实时撤销未实现。
 - 反向转发依赖 SSH 公钥或密码认证与远程监听权限；尚无 SSH agent、键盘交互认证、自动重连或公开中继服务。
 - 域名规则命中后由网关解析；未命中域名会先经过系统 DNS 再检查 IP。当前没有完整 split-DNS 或多地址容灾。
@@ -157,17 +180,17 @@ svpn-cli serve --state private/auth.json --user-agent 'YOUR_USER_AGENT'
 
 ## 开发与发布
 
-源码需要 Go 1.26+；发布及 CI 使用 Go 1.27.4。
+源码需要 Go 1.27.3+；发布及 CI 使用 Go 1.27.4。
 
 ```bash
 go test -race ./...
 go vet ./...
 go build -trimpath -o bin/svpn-cli ./cmd/svpn-cli
-python3 scripts/build_release.py --version v0.2.0
+python3 scripts/build_release.py --version v0.3.0
 ```
 
 原生测试在 Linux/macOS/Windows 执行，打包任务构建三系统的 amd64/arm64 共六份产物。推送 `v*` 标签会启动 Release 工作流：测试及构建通过后，校验压缩包，再发布实验版本和 SHA-256 校验文件。保持提交简小，回滚用 `git revert`。
 
 ## 许可证
 
-项目原创代码使用 [MIT](LICENSE)。Go 组件的 BSD 许可证见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)，第三方名称及归属见 [NOTICE](NOTICE)。发布包不包含官方安装包、组织私密策略或用户凭据。
+项目原创代码使用 [MIT](LICENSE)。依赖的 BSD、MIT、Apache 许可证见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)，第三方名称及归属见 [NOTICE](NOTICE)。发布包不包含官方安装包、组织私密策略或用户凭据。

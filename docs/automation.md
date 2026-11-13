@@ -6,6 +6,7 @@ CLI 可直接作为进程工具调用。对有限命令使用 argv 数组、捕�
 
 ```bash
 svpn-cli --json version
+svpn-cli --json capabilities
 svpn-cli --json help
 svpn-cli --json help auth finish
 svpn-cli --json help serve
@@ -36,6 +37,7 @@ svpn-cli --json help reverse
 | 命令 | 主要结果字段 |
 | --- | --- |
 | `version` | `version`、`commit`、`build_date`、`os`、`arch` |
+| `capabilities` | `features`、`platform`、`deployment_probed: false`、`runtime_prerequisites_checked: false` |
 | `auth init` | `state_file`、`registered`、`next_action` |
 | `auth sso` | `state_file`、`login_url`、`expires_at`、浏览器登录动作 |
 | `auth finish` / `auth exchange` | `state_file`、`response_saved`、`next_action` |
@@ -148,3 +150,13 @@ if result.returncode != 0 or not record["ok"]:
 stage = record["data"]["stage"]
 next_action = record["data"]["next_action"]
 ```
+
+## UDP、TUN 与 TLCP 能力发现
+
+先运行 `svpn-cli --json capabilities`。`available` 描述本地实现及平台范围，不代表当前部署授权、设备权限或证书配置已经通过验证；此命令不读登录状态，也不发送探测请求。SPA 与 RFC 8998 国密 TLS 1.3 明确返回不可用，不能依据普通 TLS 连接成功推断这些功能已支持。
+
+SOCKS5 UDP 使用 `UDP ASSOCIATE`，客户端须保持控制 TCP 连接，使用回复中的实际 UDP 监听地址。关联和 UDP 流均计入连接上限；不支持 SOCKS 分片，单流空闲约 60 秒后关闭。关联成功及 `serve` 的 ready 事件都不代表某个 UDP 目标已获授权或连通；后续被拒绝的数据报可能没有业务响应。
+
+`svpn-cli --json tun --state FILE --device NAME` 在 Linux 打开已准备的 TUN，也可用 `--fd NUMBER` 接收已打开的描述符。它输出 NDJSON `ready` / `stopped`；ready 含 `device`、`mtu`、`mode`、`protocols`、`route_configuration: "external"` 和 `dns_hijack: false`。路由、DNS、设备权限及出口旁路由调用方配置；当前只允许 `vpn-only`。`TUN_DEVICE_FAILED` 使用退出码 4，不会自动提权或修改路由。
+
+`--gateway-tls tlcp --gateway-ca FILE` 显式选择网关 TLCP 1.1，校验签名/加密双证书；不接受单叶指纹，也不在失败后重试普通 TLS。控制面仍为普通 HTTPS。各功能的真实验证范围和独立互操作测试见 [传输能力](transports.md)。
