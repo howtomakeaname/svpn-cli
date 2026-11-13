@@ -16,7 +16,6 @@ import (
 	"github.com/howtomakeaname/svpn-cli/internal/engine"
 	"github.com/howtomakeaname/svpn-cli/internal/native"
 	"github.com/howtomakeaname/svpn-cli/internal/proxy"
-	"github.com/howtomakeaname/svpn-cli/internal/routing"
 )
 
 func (a *application) run(args []string) error {
@@ -59,16 +58,13 @@ func (a *application) run(args []string) error {
 		return usageError("Unknown command; use svpn-cli --help.")
 	}
 	flags := a.newFlagSet(command)
-	sessionPath := flags.String("session", "", "private JSON file with already-issued resource tickets")
-	var statePath, pin, caFile, diagnostic string
-	mode, httpAddr, socksAddr, limit := "vpn-only", "127.0.0.1:17890", "127.0.0.1:17891", 128
-	var headerOptions headerFlags
-	if command != "check" {
-		headerOptions = addHeaderFlags(flags)
-		flags.StringVar(&statePath, "state", "", "private login state; enables automatic policy and ticket acquisition")
-		flags.StringVar(&mode, "mode", mode, "routing with --state: vpn-only or auto")
-		flags.StringVar(&pin, "certificate-sha256", "", "explicit gateway leaf certificate trust anchor; verify independently")
-		flags.StringVar(&caFile, "gateway-ca", "", "additional gateway CA PEM file")
+	options := connectionOptions{mode: "vpn-only"}
+	var diagnostic string
+	httpAddr, socksAddr, limit := "127.0.0.1:17890", "127.0.0.1:17891", 128
+	if command == "check" {
+		flags.StringVar(&options.session, "session", "", "private JSON file with already-issued resource tickets")
+	} else {
+		options.bind(flags)
 	}
 	if command == "connect" {
 		flags.StringVar(&diagnostic, "diagnostic", "", "save gateway refusal response to a private JSON file")
@@ -81,24 +77,18 @@ func (a *application) run(args []string) error {
 	if err := a.parseFlags(flags, args[1:]); err != nil {
 		return err
 	}
-	if (*sessionPath == "") == (statePath == "") {
-		return usageError("provide exactly one of --state or --session")
+	if err := options.validate(); err != nil {
+		return err
 	}
 	if command == "check" {
-		if flags.NArg() != 0 || *sessionPath == "" {
+		if flags.NArg() != 0 || options.session == "" {
 			return usageError("check requires --session and no positional arguments")
 		}
-		session, err := loadSession(*sessionPath)
+		session, err := loadSession(options.session)
 		if err != nil {
 			return err
 		}
 		return a.result("check", fmt.Sprintf("Session format valid: %d resources; expires %s. Connectivity has not been tested.", len(session.Resources), session.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")), map[string]any{"resource_count": len(session.Resources), "expires_at": session.ExpiresAt, "connectivity_tested": false})
-	}
-	if mode != "vpn-only" && mode != "auto" {
-		return usageError("--mode must be vpn-only or auto")
-	}
-	if *sessionPath != "" && (mode != "vpn-only" || pin != "" || caFile != "") {
-		return usageError("mode and gateway trust flags require --state; session files contain their own trust settings")
 	}
 	if command == "connect" {
 		if flags.NArg() != 2 {
@@ -125,40 +115,11 @@ func (a *application) run(args []string) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	var dial proxy.DialFunc
-	if statePath != "" {
-		e, err := loginEngine(statePath, pin, caFile)
-		if err != nil {
-			return err
-		}
-		e.Client.Profile, err = headerOptions.apply(e.Client.Profile)
-		if err != nil {
-			return err
-		}
-		defer e.Client.HTTP.CloseIdleConnections()
-		router, err := routing.New(mode, e.FetchPolicy, e.DialContext)
-		if err != nil {
-			return err
-		}
-		if _, err := router.Policy(ctx); err != nil {
-			return remoteFailure(err)
-		}
-		dial = router.DialContext
-	} else {
-		session, err := loadSession(*sessionPath)
-		if err != nil {
-			return err
-		}
-		session.HeaderProfile, err = headerOptions.apply(session.HeaderProfile)
-		if err != nil {
-			return err
-		}
-		dialer, err := native.NewDialer(session)
-		if err != nil {
-			return err
-		}
-		dial = dialer.DialContext
+	dial, cleanup, err := options.open(ctx)
+	if err != nil {
+		return err
 	}
+	defer cleanup()
 	if command == "connect" {
 		conn, err := dial(ctx, "tcp", net.JoinHostPort(flags.Arg(0), flags.Arg(1)))
 		if err != nil {
@@ -185,7 +146,7 @@ func (a *application) run(args []string) error {
 		_, err = io.Copy(a.out, conn)
 		return err
 	}
-	return a.serve(ctx, dial, mode, httpAddr, socksAddr, limit)
+	return a.serve(ctx, dial, options.mode, httpAddr, socksAddr, limit)
 }
 
 func (a *application) serve(ctx context.Context, dial proxy.DialFunc, mode, httpAddr, socksAddr string, limit int) error {
