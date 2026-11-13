@@ -87,6 +87,8 @@ func TestJSONErrorsAndArgumentValidation(t *testing.T) {
 		{[]string{"connect", "--state", "unused", "host", "0"}, "INVALID_ARGUMENT", 2},
 		{[]string{"forward", "--state", "unused"}, "INVALID_ARGUMENT", 2},
 		{[]string{"forward", "--state", "unused", "--target", "inside.example:22", "--listen", "0.0.0.0:8080"}, "INVALID_ARGUMENT", 2},
+		{[]string{"reverse", "--state", "unused", "--ssh-host", "inside.example:22", "--target", "0.0.0.0:3000"}, "INVALID_ARGUMENT", 2},
+		{[]string{"reverse", "--state", "unused", "--ssh-host", "inside.example:22", "--target", "127.0.0.1:3000"}, "INVALID_ARGUMENT", 2},
 		{[]string{"connect", "--state", "unused", "host", "22", "--json"}, "INVALID_ARGUMENT", 2},
 		{[]string{"auth", "finish"}, "INTERACTION_REQUIRED", 3},
 		{[]string{"auth", "finish", "--callback-file", "unused", "--callback-stdin"}, "INVALID_ARGUMENT", 2},
